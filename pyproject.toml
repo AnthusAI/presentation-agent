@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vibe-presentation"
+version = "0.1.0"
+authors = [
+  { name="Ryan Porter", email="ryan@example.com" },
+]
+description = "A CLI tool for vibe-coding presentations"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "click",
+    "rich",
+    "behave",
+    "google-generativeai",
+    "python-dotenv",
+    "requests"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/yourusername/vibe-presentation"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,6 @@
+click
+rich
+behave
+google-generativeai
+python-dotenv
+
