@@ -252,12 +252,19 @@ def events():
         def listener(event_type, data):
             events_queue.append((event_type, data))
             
-        if current_service:
-            current_service.subscribe(listener)
+        # Track the service we are subscribed to
+        last_service = None
             
         # Keep connection open and yield events
         # We check queue every 0.1s
         while True:
+            # Check if service changed (dynamic subscription)
+            global current_service
+            if current_service != last_service:
+                if current_service:
+                    current_service.subscribe(listener)
+                last_service = current_service
+
             while events_queue:
                 event_type, data = events_queue.pop(0)
                 yield f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
