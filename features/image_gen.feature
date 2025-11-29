@@ -15,3 +15,15 @@ Feature: Nano Banana Image Generation
     Then the image from candidate 2 should be saved to the presentation images folder
     And the other candidates should be cleaned up
 
+  Scenario: Web Mode Async Generation
+    Given I am using the web UI
+    When the agent calls generate_image for "A serene lake"
+    Then the agent should receive a WAIT message
+    And the agent should NOT proceed with writing files
+    And the web UI should show the candidates
+
+  Scenario: Web Mode Agent Resumes
+    Given the agent is waiting for image selection
+    When I choose candidate number 1 in the web UI
+    Then a SYSTEM message should be sent to the agent
+    And the message should contain the saved filename

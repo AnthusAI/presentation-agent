@@ -12,7 +12,9 @@ def step_impl(context):
     presentation = manager.get_presentation(name)
     tools = PresentationTools(presentation, MagicMock())
     
-    with patch('subprocess.run') as mock_run:
+    # Mock both subprocess.run and os.startfile to prevent opening files
+    with patch('subprocess.run') as mock_run, \
+         patch('os.startfile', create=True):
         mock_run.return_value.returncode = 0
         context.tool_result = tools.export_pdf()
         context.mock_run = mock_run

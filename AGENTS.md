@@ -28,4 +28,9 @@ As an agent working on this project, you **MUST** adhere to the following cycle 
 *   **Never write code without a failing test.**
 *   **Don't guess**; if a test fails, read the error, understand it, and fix the code or the test.
 *   **Verify visually** if possible (e.g. "Run it and see") in addition to automated tests, but automated tests are the source of truth for behavior.
+*   **CRITICAL: Run tests after EVERY code change.** Do not declare a task complete, do not commit, do not move on until you have:
+    1. Run `behave` (or the relevant subset of tests)
+    2. Confirmed that ALL tests PASS (0 failed, 0 error)
+    3. If tests fail or error, FIX THEM IMMEDIATELY before doing anything else
+*   **Never assume tests pass.** Always verify. A BDD project with failing tests is a broken project.
 

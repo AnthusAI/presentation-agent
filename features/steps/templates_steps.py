@@ -127,8 +127,9 @@ def step_impl(context, template):
         context.nano_client = MagicMock()
         context.tools = PresentationTools(context.presentation_context, context.nano_client)
 
-    # Mock the subprocess call in tools
-    with patch('subprocess.run') as mock_run:
+    # Mock both subprocess.run and os.startfile to prevent opening files
+    with patch('subprocess.run') as mock_run, \
+         patch('os.startfile', create=True):
         context.tools.preview_template(template)
         context.mock_subprocess = mock_run
 

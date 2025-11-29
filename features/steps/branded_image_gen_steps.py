@@ -50,7 +50,9 @@ def step_impl(context, prompt, deck_name):
     pres_context = manager.get_presentation(deck_name)
     
     # We need to patch PIL.Image.open because our fake image is invalid
-    with patch('PIL.Image.open') as mock_open:
+    # Also patch _open_folder to prevent opening files in Finder
+    with patch('PIL.Image.open') as mock_open, \
+         patch('vibe_presentation.nano_banana.NanoBananaClient._open_folder'):
         mock_image = MagicMock()
         mock_open.return_value = mock_image
         

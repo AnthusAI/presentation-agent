@@ -39,7 +39,15 @@ class NanoBananaClient:
              # Use 'models/nano-banana-pro-preview' as requested
              self.model_name = 'models/nano-banana-pro-preview' 
         
-    def generate_candidates(self, prompt, status_spinner=None):
+    def generate_candidates(self, prompt, status_spinner=None, progress_callback=None):
+        """
+        Generate 4 image candidates.
+        
+        Args:
+            prompt: The image generation prompt
+            status_spinner: Rich spinner for CLI mode
+            progress_callback: Function(current, total, status) for web mode progress updates
+        """
         if status_spinner:
             status_spinner.stop() # Pause spinner for logs
             
@@ -94,7 +102,7 @@ class NanoBananaClient:
         
         if not self.api_key:
             console.print("[red]Error: API Key not found.[/red]")
-            return self._fallback_generation(request_folder)
+            return self._fallback_generation(request_folder, progress_callback)
 
         # Try the specific image generation model first if it exists in the mental map of the SDK
         # otherwise fallback to the main multimodal model.
@@ -102,6 +110,8 @@ class NanoBananaClient:
         model = genai.GenerativeModel(self.model_name)
 
         for i in range(4):
+            if progress_callback:
+                progress_callback(i+1, 4, f"Generating image {i+1}/4...", candidates)
             console.print(f"  Generating candidate {i+1}/4...")
             try:
                 # Gemini 2.0 Flash Exp supports generating images via text prompt
@@ -118,6 +128,10 @@ class NanoBananaClient:
                                 f.write(part.inline_data.data)
                             candidates.append(output_path)
                             image_saved = True
+                            
+                            # Notify progress callback immediately after each image is generated
+                            if progress_callback:
+                                progress_callback(i+1, 4, f"Generated image {i+1}/4", candidates)
                             break
                         # Some models return a URI or executable code to render.
                         # If it's just text, it failed to generate an image.
@@ -129,17 +143,25 @@ class NanoBananaClient:
                     # If this fails, we might need to use the REST API directly if the SDK is hiding the image capability.
                     console.print(f"  [red]No image found in response for candidate {i+1}[/red]")
                     candidates.append(self._create_dummy(request_folder, i+1))
+                    if progress_callback:
+                        progress_callback(i+1, 4, f"Generated image {i+1}/4 (fallback)", candidates)
 
             except ResourceExhausted:
                 console.print(f"  [red]Quota exceeded for candidate {i+1}. Please try again later.[/red]")
                 candidates.append(self._create_dummy(request_folder, i+1))
+                if progress_callback:
+                    progress_callback(i+1, 4, f"Generated image {i+1}/4 (quota exceeded)", candidates)
             except Exception as e:
                 console.print(f"  [red]Error generating candidate {i+1}: {e}[/red]")
                 candidates.append(self._create_dummy(request_folder, i+1))
+                if progress_callback:
+                    progress_callback(i+1, 4, f"Generated image {i+1}/4 (error)", candidates)
             
             time.sleep(1)
 
-        self._open_folder(request_folder)
+        # Only open folder in CLI mode (when no progress callback provided)
+        if not progress_callback:
+            self._open_folder(request_folder)
         return candidates
 
     def _create_dummy(self, folder, index):
@@ -149,12 +171,15 @@ class NanoBananaClient:
                 f.write(b"dummy_image_data_placeholder")
         return path
 
-    def _fallback_generation(self, folder):
+    def _fallback_generation(self, folder, progress_callback=None):
         console.print("[yellow]Falling back to dummy generation...[/yellow]")
         candidates = []
         for i in range(4):
+            if progress_callback:
+                progress_callback(i+1, 4, f"Generating image {i+1}/4...")
             candidates.append(self._create_dummy(folder, i+1))
-        self._open_folder(folder)
+        if not progress_callback:
+            self._open_folder(folder)
         return candidates
 
     def _open_folder(self, path):

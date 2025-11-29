@@ -100,7 +100,9 @@ def step_impl(context):
     presentation = manager.get_presentation("test-deck")
     tools = PresentationTools(presentation, MagicMock())
     
-    with patch('subprocess.run') as mock_run:
+    # Mock both subprocess.run and os.startfile to prevent opening files
+    with patch('subprocess.run') as mock_run, \
+         patch('os.startfile', create=True):
         # Mock successful run
         mock_run.return_value.returncode = 0
         mock_run.return_value.stdout = b"Success"

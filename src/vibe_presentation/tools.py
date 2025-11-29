@@ -12,6 +12,10 @@ class PresentationTools:
         self.context = presentation_context
         self.nano_client = nano_client
         self.status_spinner = None # To be set by Agent/REPL
+        self.waiting_for_user_input = False  # Flag to indicate we're waiting for external input
+        
+        # Hook for notifying updates (e.g., presentation compiled)
+        self.on_presentation_updated = None
         
         # Resolve presentation root
         env_root = os.environ.get('VIBE_PRESENTATION_ROOT')
@@ -116,7 +120,22 @@ class PresentationTools:
             return f"Error writing file: {str(e)}"
 
     def generate_image(self, prompt: str):
-        """Generates an image using Nano Banana."""
+        """
+        Generates an image using Nano Banana.
+        
+        In CLI mode: Synchronously generates, displays, and waits for selection.
+        In Web mode: Triggers async generation and returns immediately. The system will
+                     call the agent again after user selects an image.
+        """
+        # Check if we have an image generation callback (indicates web mode)
+        if hasattr(self, 'on_image_generation'):
+            # Web mode: Trigger the full async workflow
+            # System will handle: generate → display UI → user selects → save → notify agent
+            self.waiting_for_user_input = True  # Signal that we need to wait
+            self.on_image_generation(prompt)
+            return "WAIT: Image generation started. The system is generating 4 candidates for the user to choose from. DO NOT proceed with incorporating the image yet. Wait for a [SYSTEM] message that tells you which image the user selected and its filename."
+        
+        # CLI mode: Synchronous interactive selection
         # Pause spinner if active
         if self.status_spinner:
             self.status_spinner.stop()
@@ -126,16 +145,6 @@ class PresentationTools:
             if not candidates:
                 return "Failed to generate images."
             
-            # In agent mode, we can't really do interactive prompt easily via tools return value.
-            # But the requirement says "interactive process".
-            # The REPL handles /image command interactively.
-            # If the Agent calls this, it should probably return the paths so the Agent can tell the user?
-            # Or triggers the same interactive flow?
-            # The tool implementation in REPL context might need to be interactive.
-            # For now, let's return the candidates and ask user to pick.
-            
-            # Actually, the user asked for "agent tool" to be interactive.
-            # We can use IntPrompt here since this runs locally.
             console.print("[bold]Generated Candidates:[/bold]")
             for i, path in enumerate(candidates):
                 console.print(f"{i+1}. {path}")
@@ -143,12 +152,10 @@ class PresentationTools:
             selection = IntPrompt.ask("Select an image (1-4) or 0 to cancel", choices=["0", "1", "2", "3", "4"])
             
             if selection > 0:
-                filename = f"image_{selection}.png" # Agent doesn't pick filename usually? Or maybe prompt for it.
-                # Let's auto-name or ask. Simpler to auto-name for tool use to avoid blocking too much?
-                # User spec: "interactive process where it generates... for user to pick from"
+                filename = f"image_{selection}.png"
                 saved_path = self.nano_client.save_selection(candidates, selection - 1, filename)
                 rel_path = os.path.relpath(saved_path, self.presentation_dir)
-                return f"Image generated and saved to {rel_path}"
+                return f"Image generated and saved to {rel_path}. You can now reference it in the presentation."
             else:
                 return "Image selection cancelled."
         finally:
@@ -162,7 +169,20 @@ class PresentationTools:
         try:
             # Use --allow-local-files to support absolute paths or images outside working dir if needed
             subprocess.run(["npx", "@marp-team/marp-cli", "deck.marp.md", "--allow-local-files"], cwd=self.presentation_dir, check=True)
+            
+            # Notify listeners
+            if self.on_presentation_updated:
+                self.on_presentation_updated()
+
             # Try to open the HTML/PDF? Defaults to HTML
+            # If we have a callback, assume it handles UI update and skip opening if requested.
+            # For now, we only skip opening if explicitly told or maybe just always open in CLI mode?
+            # We don't know if we are in CLI or Web mode easily here without passing a flag.
+            # But if on_presentation_updated is set, it implies Web Mode usually.
+            # Let's skip opening if callback is set, assuming Web Mode handles it.
+            if self.on_presentation_updated:
+                return "Compilation successful. Presentation updated in Web UI."
+
             html_file = os.path.join(self.presentation_dir, "deck.marp.html")
             if os.path.exists(html_file):
                 if os.name == 'posix':

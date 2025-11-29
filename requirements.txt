@@ -5,3 +5,5 @@ google-generativeai
 python-dotenv
 requests
 Pillow
+flask
+pyyaml

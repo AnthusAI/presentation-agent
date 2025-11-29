@@ -41,9 +41,22 @@ def _interactive_create(ctx, manager):
 
 @click.group(invoke_without_command=True)
 @click.option('--continue', 'resume', is_flag=True, help='Resume the most recently edited presentation')
+@click.option('--web', '-w', is_flag=True, help='Start the web UI server')
+@click.option('--port', default=5555, help='Port for web server (only used with --web)')
 @click.pass_context
-def cli(ctx, resume):
+def cli(ctx, resume, web, port):
     """Vibe-Coded Presentation CLI"""
+    if web:
+        try:
+            from vibe_presentation.webapp import app
+            console.print(f"[green]Starting Web UI on http://localhost:{port}[/green]")
+            app.run(port=port, debug=True)
+        except ImportError:
+            console.print("[red]Error: Flask not installed. Please run: pip install flask[/red]")
+        except Exception as e:
+            console.print(f"[red]Error starting web server: {e}[/red]")
+        return
+
     if ctx.invoked_subcommand is None:
         # If resume flag is set, find most recent and load it
         manager = PresentationManager()
@@ -219,6 +232,7 @@ def preview(name):
         console.print(f"[red]Error running Marp: {e}[/red]")
     except FileNotFoundError:
         console.print("[red]Error: npx not found. Please ensure Node.js and npm are installed.[/red]")
+
 
 if __name__ == '__main__':
     cli()

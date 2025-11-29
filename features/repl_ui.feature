@@ -18,7 +18,7 @@ Feature: REPL UI and Commands
     Given I have a presentation named "test-deck"
     When I execute the load command for "test-deck"
     Then the output should contain a box in "magenta2" color
-    And the REPL output should contain "Presentation Agent"
+    And the REPL output should contain "DeckBot"
     And the REPL output should contain "Working on:"
     And the REPL output should contain "test-deck"
     And the REPL output should contain "I can help you make a presentation"

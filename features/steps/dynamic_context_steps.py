@@ -39,16 +39,15 @@ def step_impl_with_resume(context, name, resume_val):
     presentation = manager.get_presentation(name)
     
     # Mock dependencies
-    with patch('vibe_presentation.repl.Agent') as MockAgent, \
-         patch('vibe_presentation.repl.NanoBananaClient'), \
+    with patch('vibe_presentation.repl.SessionService') as MockSessionService, \
          patch('vibe_presentation.repl.Console') as mock_console_cls, \
          patch('vibe_presentation.repl.console') as mock_console_instance, \
          patch('rich.prompt.Prompt.ask', side_effect=['/exit']):
         
-        context.mock_agent_instance = MockAgent.return_value
-        context.mock_agent_instance.chat.return_value = "I am an AI response."
+        mock_service = MockSessionService.return_value
+        mock_service.send_message.return_value = "I am an AI response."
         
-        # Mock load_history to return specific history if expected
+        # Mock get_history to return specific history if expected
         presentation_dir = os.path.join(context.temp_dir, name)
         history_file = os.path.join(presentation_dir, "chat_history.jsonl")
         if os.path.exists(history_file):
@@ -59,10 +58,11 @@ def step_impl_with_resume(context, name, resume_val):
                     try:
                         history.append(json.loads(line))
                     except: pass
-            context.mock_agent_instance.load_history.return_value = history
+            mock_service.get_history.return_value = history
         else:
-             context.mock_agent_instance.load_history.return_value = []
+             mock_service.get_history.return_value = []
         
+        context.mock_service = mock_service
         context.mock_console = mock_console_instance
         start_repl(presentation, resume=resume)
 
@@ -74,7 +74,7 @@ def step_impl(context, filename, content):
 
 @when('I send a message "{message}" to the agent')
 def step_impl(context, message):
-    context.mock_agent_instance.chat(message)
+    context.mock_service.send_message(message)
 
 @then('the agent system prompt should contain "{text}"')
 def step_impl(context, text):
@@ -82,10 +82,10 @@ def step_impl(context, text):
 
 @then('the agent should generate an initial response')
 def step_impl(context):
-    # Verify agent.chat was called with the hidden prompt
+    # Verify service.send_message was called with the hidden prompt
     initial_prompt_fragment = "Analyze the current presentation state"
     found = False
-    for call in context.mock_agent_instance.chat.call_args_list:
+    for call in context.mock_service.send_message.call_args_list:
         args, _ = call
         if initial_prompt_fragment in args[0]:
             found = True
@@ -95,7 +95,7 @@ def step_impl(context):
 @then('the agent should NOT generate an initial response')
 def step_impl(context):
     initial_prompt_fragment = "Analyze the current presentation state"
-    for call in context.mock_agent_instance.chat.call_args_list:
+    for call in context.mock_service.send_message.call_args_list:
         args, _ = call
         if initial_prompt_fragment in args[0]:
             assert False, "Agent generated an initial response when it should not have."
@@ -110,9 +110,9 @@ def step_impl(context, phrase):
     # initial_prompt = "Analyze the current presentation state..."
     # response = agent.chat(initial_prompt)
     
-    # So we check call args of chat.
+    # So we check call args of send_message.
     initial_prompt_fragment = "Analyze the current presentation state"
-    for call in context.mock_agent_instance.chat.call_args_list:
+    for call in context.mock_service.send_message.call_args_list:
         args, _ = call
         if initial_prompt_fragment in args[0]:
             # This is the prompt we are looking for.

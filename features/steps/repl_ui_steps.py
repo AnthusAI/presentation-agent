@@ -22,11 +22,15 @@ def step_impl(context, name, command):
         # because it might print/do other things.
         # "exit cleanly" means the function returns.
         
-        # We also need to mock Agent and NanoBananaClient to avoid IO
-        with patch('vibe_presentation.repl.Agent'), \
-             patch('vibe_presentation.repl.NanoBananaClient'), \
+        # We need to mock SessionService to avoid IO
+        with patch('vibe_presentation.repl.SessionService') as MockSessionService, \
              patch('vibe_presentation.repl.Console') as mock_console_cls, \
              patch('vibe_presentation.repl.console') as mock_console_instance:
+            
+            # Mock the SessionService instance
+            mock_service = MockSessionService.return_value
+            mock_service.get_history.return_value = []
+            mock_service.send_message.return_value = "Test response"
             
             mock_console = mock_console_instance
             context.mock_console = mock_console
@@ -104,10 +108,14 @@ def step_impl(context, name):
     with patch('rich.prompt.Prompt.ask') as mock_prompt:
         mock_prompt.side_effect = ["/exit"]
         
-        with patch('vibe_presentation.repl.Agent'), \
-             patch('vibe_presentation.repl.NanoBananaClient'), \
+        with patch('vibe_presentation.repl.SessionService') as MockSessionService, \
              patch('vibe_presentation.repl.Console') as mock_console_cls, \
              patch('vibe_presentation.repl.console') as mock_console_instance:
+            
+            # Mock the SessionService instance
+            mock_service = MockSessionService.return_value
+            mock_service.get_history.return_value = []
+            mock_service.send_message.return_value = "Test response"
             
             mock_console = mock_console_instance
             context.mock_console = mock_console

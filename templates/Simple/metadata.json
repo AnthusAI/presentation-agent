@@ -1,0 +1,8 @@
+{
+  "name": "Simple",
+  "description": "A clean, simple template using the Gaia theme with a background image.",
+  "instructions": "Maintain a clean, minimal style. Use bullet points frequently. Keep text concise.",
+  "image_style": {
+    "prompt": "Create images with a clean, minimalist flat vector art style. Use a white background where possible."
+  }
+}

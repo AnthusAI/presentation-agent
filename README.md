@@ -1,4 +1,6 @@
-# Vibe-Presentation CLI
+<img src="assets/deckbot-logo.png" alt="DeckBot Logo" align="right" width="300">
+
+# DeckBot: Vibe-Coded Presentation Assistant
 
 This is a CLI AI assistant, similar to tools like Claude Code or the Gemini CLI, but specialized for creating presentation slide decks with **Marp**. Marp is a declarative system that lets you define presentations using Markdown, which can then be viewed as interactive HTML or exported to PDF.
 
@@ -32,12 +34,45 @@ This project uses **Behavior Driven Development** (using `behave`) as a primary 
 *   **Stability & Reusability**: By codifying behavior into tests, we ensure that new features don't break existing ones. This allows us to build reliable, reusable software with the same effort often spent on "throwaway" scripts.
 *   **AI Alignment**: For AI-assisted coding, BDD provides a perfect feedback loop. If the behavior specs pass, the implementation is correct, regardless of the underlying code structure. This allows us to focus on desired outcomes and feature stability rather than getting bogged down in implementation details.
 
+### Running Tests
+
+This project has **comprehensive BDD test coverage** for both backend and frontend:
+
+**Run all tests:**
+```bash
+behave
+```
+
+**Backend/CLI tests:**
+```bash
+behave features/cli.feature          # CLI commands and interactive mode
+behave features/templates.feature    # Template system
+behave features/export.feature       # PDF export
+```
+
+**Frontend/Web UI tests:**
+```bash
+behave features/web_ui.feature       # Web UI, color themes, preferences, image selection
+```
+
+**See test output:**
+```bash
+behave --no-capture
+```
+
+**Test a specific scenario:**
+```bash
+behave features/web_ui.feature -n "Color Theme Selection"
+```
+
+All features are documented in the `features/` directory using Gherkin syntax. Read them to understand exactly how the system behaves!
+
 ## Installation
 
 1.  **Clone and Environment Setup:**
     ```bash
-    conda create -n vibe-presentation python=3.11
-    conda activate vibe-presentation
+    conda create -n deckbot python=3.11
+    conda activate deckbot
     pip install -e .
     ```
 
@@ -47,17 +82,19 @@ This project uses **Behavior Driven Development** (using `behave`) as a primary 
     *   **VS Code `code` command**: Optional, for opening folders automatically.
 
 3.  **Configuration:**
-    Create a `.env` file with your Google AI Studio API key:
+    Create a `.env` file in the project root with your Google AI API key:
     ```bash
-    GOOGLE_AI_STUDIO_API_KEY=your_api_key_here
+    GOOGLE_API_KEY=your_api_key_here
     ```
+    
+    Get your API key from [Google AI Studio](https://aistudio.google.com/apikey)
 
 ## Usage
 
 ### Interactive Mode (Recommended)
 Simply run the CLI without arguments to start the interactive launcher:
 ```bash
-python -m vibe_presentation.cli
+deckbot
 ```
 You can select an existing deck or create a new one.
 
@@ -65,32 +102,32 @@ You can select an existing deck or create a new one.
 
 *   **Resume Session**: Pick up exactly where you left off.
     ```bash
-    python -m vibe_presentation.cli --continue
+    deckbot --continue
     ```
 
 *   **Create a Deck**:
     ```bash
-    python -m vibe_presentation.cli create my-deck --description "A demo deck"
+    deckbot create my-deck --description "A demo deck"
     ```
 
 *   **Use Templates**:
     List available templates:
     ```bash
-    python -m vibe_presentation.cli templates list
+    deckbot templates list
     ```
     Create from a template:
     ```bash
-    python -m vibe_presentation.cli create my-startup --template Simple
+    deckbot create my-startup --template Simple
     ```
 
 *   **Start the Assistant**:
     ```bash
-    python -m vibe_presentation.cli load my-deck
+    deckbot load my-deck
     ```
 
 *   **Preview Deck**:
     ```bash
-    python -m vibe_presentation.cli preview my-deck
+    deckbot preview my-deck
     ```
 
 ### In the Assistant (REPL)
@@ -100,3 +137,11 @@ You can select an existing deck or create a new one.
 *   **Show Work**: "Show me the deck" (prints a summary).
 *   **Preview**: "Preview the presentation" (opens the HTML preview).
 *   **Export**: "Export to PDF" (saves a PDF version).
+
+### Web Mode
+Prefer a visual interface? Launch the web UI with color themes, visual image selection, and live preview.
+
+```bash
+deckbot --web
+```
+Then open `http://localhost:5555` in your browser.

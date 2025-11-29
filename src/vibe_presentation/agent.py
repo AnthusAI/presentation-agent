@@ -82,7 +82,7 @@ class Agent:
             pass
         
         return f"""
-You are "Presentation Agent", a helpful AI assistant for creating Marp (Markdown) presentations.
+You are "DeckBot", a helpful AI assistant for creating Marp (Markdown) presentations.
 
 ## Current Presentation Context
 Name: {self.context['name']}
@@ -103,12 +103,20 @@ Description: {self.context.get('description', '')}
 - Use 'list_files' to see what slides exist.
 - Use 'read_file' to read slide content (though full context is provided above).
 - Use 'write_file' to create or update slides.
-- Use 'generate_image' to create visuals.
+- Use 'generate_image' to create visuals. **IMPORTANT**: When you call this, the system will generate candidates and let the user pick. DO NOT write any files that reference the image until you receive a [SYSTEM] message confirming which image was selected.
 - Use 'compile_presentation' to BUILD and PREVIEW the actual slide deck (opens HTML). Use this when the user wants to "see the deck" or "preview".
 - Use 'export_pdf' to EXPORT the deck to PDF. This requires Chrome/Chromium installed on the system.
 - Use 'open_presentation_folder' to OPEN the source files for the user to edit.
 - Use 'get_presentation_summary' to get a text summary of the slide deck state (titles, images, text previews). Use this for YOUR understanding or to summarize progress in chat, but NOT to "show" the deck visually.
 - Use 'list_presentations', 'create_presentation', 'load_presentation' to manage decks.
+
+## Image Generation Workflow
+When the user asks for an image:
+1. Call 'generate_image' with the prompt - this starts the process
+2. STOP and WAIT - the system will show candidates to the user
+3. The system will send you a [SYSTEM] message like: "[SYSTEM] User selected an image. It has been saved to `images/filename.png`. Please incorporate this image..."
+4. ONLY THEN should you update the presentation files to reference that image path
+5. After incorporating, call 'compile_presentation' if appropriate to update the preview
 
 ## Behavior
 - Be proactive. If the user agrees to a plan, execute it (write the files).
@@ -139,6 +147,9 @@ Description: {self.context.get('description', '')}
         # Update tools with spinner if provided
         if status_spinner:
             self.tools_handler.status_spinner = status_spinner
+        
+        # Reset waiting flag at the start of each turn
+        self.tools_handler.waiting_for_user_input = False
 
         # Refresh system prompt and re-initialize model to include latest file context
         new_system_prompt = self._build_system_prompt()
@@ -153,6 +164,12 @@ Description: {self.context.get('description', '')}
             response = self.chat_session.send_message(user_input)
             text_response = response.text
             self._log_message("model", text_response)
+            
+            # If tool set the waiting flag, append a note to the response
+            if self.tools_handler.waiting_for_user_input:
+                # Don't add anything to the response - it's already explained in the tool return value
+                pass
+            
             return text_response
         except Exception as e:
             # If tool use fails or returns something other than text, catch it.

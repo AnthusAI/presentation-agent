@@ -153,3 +153,12 @@ paginate: true
                 return json.load(f)
         return None
 
+    def delete_presentation(self, name):
+        path = os.path.join(self.root_dir, name)
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Presentation '{name}' not found.")
+        
+        import shutil
+        shutil.rmtree(path)
+        return True
+

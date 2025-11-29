@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeckBot</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <!-- Top Menu Bar (Shadcn Style) -->
+    <div class="menu-bar">
+        <div class="menu-left">
+            <div class="menu-item">
+                <button class="menu-button">DeckBot</button>
+                <div class="dropdown-menu">
+                    <button id="menu-about" class="dropdown-item">
+                        <i data-lucide="info" style="width: 16px; height: 16px;"></i>
+                        About DeckBot
+                    </button>
+                    <div class="dropdown-divider"></div>
+                    <button id="menu-preferences" class="dropdown-item">
+                        <i data-lucide="settings" style="width: 16px; height: 16px;"></i>
+                        Preferences...
+                        <span class="kbd">⌘,</span>
+                    </button>
+                </div>
+            </div>
+            <div class="menu-item">
+                <button class="menu-button">File</button>
+                <div class="dropdown-menu">
+                    <button id="menu-new" class="dropdown-item">
+                        <i data-lucide="file-plus" style="width: 16px; height: 16px;"></i>
+                        New Presentation...
+                    </button>
+                    <button id="menu-open" class="dropdown-item">
+                        <i data-lucide="folder-open" style="width: 16px; height: 16px;"></i>
+                        Open Presentation...
+                    </button>
+                    <div class="dropdown-divider"></div>
+                    <button id="menu-export" class="dropdown-item">
+                        <i data-lucide="file-down" style="width: 16px; height: 16px;"></i>
+                        Export PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="menu-right">
+            <div class="theme-selector">
+                <button class="theme-btn" data-theme="light" title="Light Mode">
+                    <i data-lucide="sun"></i>
+                </button>
+                <button class="theme-btn" data-theme="dark" title="Dark Mode">
+                    <i data-lucide="moon"></i>
+                </button>
+                <button class="theme-btn" data-theme="system" title="System Mode">
+                    <i data-lucide="monitor"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Presentation Selection Modal -->
+        <div id="presentation-select" class="overlay">
+            <div class="modal">
+                <h2>Select or Create Presentation</h2>
+                <div id="presentation-list-container">
+                    <ul id="presentation-list"></ul>
+                    <button id="btn-create-new" class="create-new-btn">+ Create New Presentation</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Create Presentation Modal -->
+        <div id="presentation-create" class="overlay hidden">
+            <div class="modal">
+                <h2>Create New Presentation</h2>
+                <form id="create-form">
+                    <input type="text" id="new-pres-name" placeholder="Presentation name" required>
+                    <input type="text" id="new-pres-desc" placeholder="Description (optional)">
+                    <select id="new-pres-template">
+                        <option value="">No template</option>
+                    </select>
+                    <div class="form-buttons">
+                        <button type="submit">Create & Load</button>
+                        <button type="button" id="btn-cancel-create" class="secondary">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Preferences Modal (Mac-style) -->
+        <div id="preferences-modal" class="overlay hidden">
+            <div class="modal preferences-modal">
+                <div class="preferences-header">
+                    <h2>Preferences</h2>
+                </div>
+                <div class="preferences-content">
+                    <div class="preference-group">
+                        <label class="preference-label">
+                            <span class="label-text">
+                                <i data-lucide="sun" style="width: 16px; height: 16px;"></i>
+                                Light/Dark Mode
+                            </span>
+                            <select id="pref-theme" class="preference-select">
+                                <option value="light">Light</option>
+                                <option value="dark">Dark</option>
+                                <option value="system">System</option>
+                            </select>
+                        </label>
+                        <p class="preference-description">Choose light or dark mode</p>
+                    </div>
+
+                    <div class="preference-group">
+                        <label class="preference-label">
+                            <span class="label-text">
+                                <i data-lucide="palette" style="width: 16px; height: 16px;"></i>
+                                Color Theme
+                            </span>
+                        </label>
+                        <p class="preference-description">Select your color palette</p>
+                        <div class="color-theme-grid">
+                            <div class="color-theme-option" data-theme="miami">
+                                <div class="color-theme-name">Miami</div>
+                                <div class="color-swatches">
+                                    <div class="color-swatch" style="background: hsl(240, 10%, 3.9%)" title="Text"></div>
+                                    <div class="color-swatch" style="background: hsl(217, 91%, 60%)" title="Primary"></div>
+                                    <div class="color-swatch" style="background: hsl(292, 84%, 61%)" title="Secondary"></div>
+                                    <div class="color-swatch" style="background: hsl(0, 84%, 60%)" title="Danger"></div>
+                                </div>
+                            </div>
+                            <div class="color-theme-option" data-theme="midwest">
+                                <div class="color-theme-name">Midwest</div>
+                                <div class="color-swatches">
+                                    <div class="color-swatch" style="background: hsl(240, 10%, 3.9%)" title="Text"></div>
+                                    <div class="color-swatch" style="background: hsl(217, 91%, 60%)" title="Primary"></div>
+                                    <div class="color-swatch" style="background: hsl(199, 89%, 48%)" title="Secondary"></div>
+                                    <div class="color-swatch" style="background: hsl(0, 84%, 60%)" title="Danger"></div>
+                                </div>
+                            </div>
+                            <div class="color-theme-option" data-theme="california">
+                                <div class="color-theme-name">California</div>
+                                <div class="color-swatches">
+                                    <div class="color-swatch" style="background: hsl(240, 10%, 3.9%)" title="Text"></div>
+                                    <div class="color-swatch" style="background: hsl(31, 100%, 60%)" title="Primary"></div>
+                                    <div class="color-swatch" style="background: hsl(173, 80%, 40%)" title="Secondary"></div>
+                                    <div class="color-swatch" style="background: hsl(0, 84%, 60%)" title="Danger"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="preferences-footer">
+                    <button id="btn-cancel-preferences" class="btn btn-secondary">Cancel</button>
+                    <button id="btn-save-preferences" class="btn btn-primary">Save</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Panel -->
+        <div class="main-chat">
+            <div id="chat-history">
+                <!-- Messages go here -->
+            </div>
+            <div id="thinking-indicator" class="hidden">
+                <div class="spinner"></div> <span class="text">Thinking...</span>
+            </div>
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <textarea id="message-input" placeholder="Type a message... (Use /image <prompt> for images)"></textarea>
+                    <button id="btn-send">
+                        <i data-lucide="send" style="width: 16px; height: 16px;"></i>
+                        Send
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resizable Divider -->
+        <div class="resizer"></div>
+
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <!-- Preview View (default) -->
+            <div id="view-preview" class="sidebar-view">
+                <iframe id="preview-frame" src=""></iframe>
+            </div>
+            
+            <!-- Image Selection View (only shown during image generation) -->
+            <div id="view-images" class="sidebar-view" style="display: none;">
+                <div class="image-view-header">
+                    <h3>Select an Image</h3>
+                    <button id="btn-close-images" class="close-btn" title="Back to preview">
+                        <i data-lucide="x" style="width: 20px; height: 20px;"></i>
+                    </button>
+                </div>
+                <div id="image-gallery">
+                    <p class="placeholder">Generating images...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="/static/app.js"></script>
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+    </script>
+</body>
+</html>

@@ -8,7 +8,7 @@ Feature: Dynamic Context and Welcome
     Given I have a presentation named "demo-deck"
     When I execute the load command for "demo-deck"
     Then the output should contain a box in "magenta2" color
-    And the REPL output should contain "Presentation Agent"
+    And the REPL output should contain "DeckBot"
     And the REPL output should contain "I can help you make a presentation"
     And the REPL output should NOT contain "Vibe Zone"
 

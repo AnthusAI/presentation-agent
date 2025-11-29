@@ -3,6 +3,8 @@ import json
 import shutil
 import tempfile
 import shlex
+import sys
+from unittest.mock import patch
 from behave import given, when, then, fixture, use_fixture
 from click.testing import CliRunner
 from vibe_presentation.cli import cli
@@ -36,11 +38,30 @@ def step_impl(context, name, description):
     manager = PresentationManager(root_dir=context.temp_dir)
     manager.create_presentation(name, description)
 
+@given('Flask is not installed')
+def step_impl(context):
+    context.flask_missing = True
+
 @when('I run the command "{command}"')
 def step_impl(context, command):
     args = shlex.split(command)
-    # Pass env via invoke, although we also set it in os.environ in fixture
-    context.result = context.runner.invoke(cli, args, env={'VIBE_PRESENTATION_ROOT': context.temp_dir})
+    env = {'VIBE_PRESENTATION_ROOT': context.temp_dir}
+    
+    if getattr(context, 'flask_missing', False):
+        # Simulate Flask missing by ensuring import fails
+        # We force import error by patching builtins.__import__? No, that's dangerous.
+        # We patch sys.modules to make the target module return None or raise error.
+        # Setting to None typically causes ImportError/ModuleNotFoundError
+        with patch.dict(sys.modules, {'vibe_presentation.webapp': None}):
+             context.result = context.runner.invoke(cli, args, env=env)
+    elif '--web' in command or '-w' in command:
+        # Mock the app.run call to prevent server from actually starting/blocking
+        # We mock the module that is imported
+        with patch('vibe_presentation.webapp.app') as mock_app:
+            context.mock_app = mock_app
+            context.result = context.runner.invoke(cli, args, env=env)
+    else:
+        context.result = context.runner.invoke(cli, args, env=env)
 
 @then('a new directory "{dirname}" should be created')
 def step_impl(context, dirname):
@@ -125,3 +146,11 @@ def step_impl(context, text):
                     break
                     
     assert not found, f"'{text}' WAS found in output"
+
+@then('the web server should start on port {port:d}')
+def step_impl(context, port):
+    assert hasattr(context, 'mock_app'), "Web app was not mocked/started"
+    assert context.mock_app.run.called
+    call_args = context.mock_app.run.call_args
+    # Check kwargs
+    assert call_args.kwargs.get('port') == port

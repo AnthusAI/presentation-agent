@@ -2,18 +2,17 @@ from rich.console import Console
 from rich.prompt import Prompt, IntPrompt
 from rich.markdown import Markdown
 from rich.panel import Panel
-from vibe_presentation.agent import Agent
-from vibe_presentation.nano_banana import NanoBananaClient
+from vibe_presentation.session_service import SessionService
 
 console = Console()
 
 def start_repl(presentation, resume=False, new_presentation=False):
-    agent = Agent(presentation)
+    service = SessionService(presentation)
     welcome_message = "I can help you make a presentation."
     
     if resume:
         console.print("[dim]Resuming previous session...[/dim]")
-        history = agent.load_history()
+        history = service.get_history()
         if history:
             # Find last model message to show as context
             for msg in reversed(history):
@@ -29,7 +28,7 @@ def start_repl(presentation, resume=False, new_presentation=False):
         welcome_message = "I've created your new presentation. How would you like to start? I can suggest an outline or we can jump right in."
 
     welcome_text = f"""
-[bold magenta]Presentation Agent[/bold magenta]
+[bold magenta]DeckBot[/bold magenta]
 
 [bold green]Working on:[/bold green] {presentation['name']}
 [italic]{presentation.get('description', '')}[/italic]
@@ -44,17 +43,16 @@ def start_repl(presentation, resume=False, new_presentation=False):
         # We send a hidden system-like prompt to trigger the agent's initial behavior
         initial_prompt = "Analyze the current presentation state. If it is empty or has only a title, ask the user what kind of presentation they want to create. If it has content, summarize it briefly and ask what they want to change."
         try:
-            # We don't log this "system" trigger to the history file if we can avoid it, 
-            # but Agent logs everything. That's okay, it's part of the flow.
             with console.status("[bold green]Thinking...[/bold green]") as status:
-                response = agent.chat(initial_prompt, status_spinner=status)
+                # Use service to send message, but note it logs to history.
+                # If we want to avoid logging initial prompt, we might need a flag in service or agent.
+                # For now, we accept it logs.
+                response = service.send_message(initial_prompt, status_spinner=status)
             console.print("[bold magenta]AI[/bold magenta]:")
             console.print(Markdown(response))
             console.print()
         except Exception as e:
             console.print(f"[red]Error generating initial summary: {e}[/red]")
-
-    nano_client = NanoBananaClient(presentation)
 
     while True:
         console.print() # Vertical whitespace before prompt
@@ -75,7 +73,9 @@ def start_repl(presentation, resume=False, new_presentation=False):
                 console.print("[yellow]Image generation cancelled (empty prompt).[/yellow]")
                 continue
 
-            candidates = nano_client.generate_candidates(prompt)
+            # Pass status spinner to service
+            with console.status("[bold green]Thinking...[/bold green]") as status:
+                 candidates = service.generate_images(prompt, status_spinner=status)
             
             console.print("[bold]Generated Candidates:[/bold]")
             for i, path in enumerate(candidates):
@@ -86,8 +86,14 @@ def start_repl(presentation, resume=False, new_presentation=False):
             
             if selection > 0:
                 filename = Prompt.ask("Enter filename to save as", default="slide_image.png")
-                saved_path = nano_client.save_selection(candidates, selection - 1, filename)
-                console.print(f"[green]Saved to {saved_path}[/green]")
+                try:
+                    saved_path = service.select_image(selection - 1, filename)
+                    if saved_path:
+                        console.print(f"[green]Saved to {saved_path}[/green]")
+                    else:
+                        console.print("[red]Error: Invalid selection or internal error.[/red]")
+                except Exception as e:
+                    console.print(f"[red]Error saving image: {e}[/red]")
             else:
                 console.print("Cancelled.")
                 
@@ -95,7 +101,7 @@ def start_repl(presentation, resume=False, new_presentation=False):
 
         # console.print("[bold green]Thinking...[/bold green]") # Removed duplicate print
         with console.status("[bold green]Thinking...[/bold green]") as status:
-            response = agent.chat(user_input, status_spinner=status)
+            response = service.send_message(user_input, status_spinner=status)
             
         console.print("[bold magenta]AI[/bold magenta]:")
         console.print(Markdown(response))

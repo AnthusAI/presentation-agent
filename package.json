@@ -1,0 +1,20 @@
+{
+  "name": "presentation-agent",
+  "version": "1.0.0",
+  "description": "This is a CLI AI assistant, similar to tools like Claude Code or the Gemini CLI, but specialized for creating presentation slide decks with **Marp**. Marp is a declarative system that lets you define presentations using Markdown, which can then be viewed as interactive HTML or exported to PDF.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "autoprefixer": "^10.4.22",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.17"
+  }
+}

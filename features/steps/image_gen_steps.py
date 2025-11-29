@@ -2,6 +2,8 @@ from behave import given, when, then
 from unittest.mock import patch, MagicMock
 from vibe_presentation.nano_banana import NanoBananaClient
 from vibe_presentation.manager import PresentationManager
+from vibe_presentation.tools import PresentationTools
+from vibe_presentation.session_service import SessionService
 import os
 import shutil
 
@@ -82,3 +84,69 @@ def step_impl(context):
     # Updated requirement: candidates should NOT be cleaned up (copied not moved)
     for candidate in context.candidates:
         assert os.path.exists(candidate)
+
+# ===== Web Mode Steps =====
+
+@given('I am using the web UI')
+def step_impl(context):
+    context.is_web_mode = True
+    context.mock_callback = MagicMock()
+    
+    # Mock NanoBananaClient
+    with patch('vibe_presentation.tools.NanoBananaClient') as MockNano:
+        context.nano_client = MockNano.return_value
+        context.tools = PresentationTools({'name': 'test-deck'}, context.nano_client)
+        # Enable web mode
+        context.tools.on_image_generation = context.mock_callback
+
+@when('the agent calls generate_image for "{prompt}"')
+def step_impl(context, prompt):
+    context.tool_result = context.tools.generate_image(prompt)
+
+@then('the agent should receive a WAIT message')
+def step_impl(context):
+    assert "WAIT:" in context.tool_result
+
+@then('the agent should NOT proceed with writing files')
+def step_impl(context):
+    assert "DO NOT proceed" in context.tool_result
+
+@then('the web UI should show the candidates')
+def step_impl(context):
+    assert context.mock_callback.called
+
+@given('the agent is waiting for image selection')
+def step_impl(context):
+    # Setup SessionService in waiting state
+    # We need to patch Agent to avoid real init if we don't want IO/API calls
+    with patch('vibe_presentation.session_service.Agent'):
+        context.service = SessionService({'name': 'test-deck'})
+    
+    context.service.agent = MagicMock()
+    context.service.pending_candidates = ["cand1.png", "cand2.png", "cand3.png", "cand4.png"]
+    context.service.last_image_prompt = "test prompt"
+    
+    # Mock notify to capture system message if needed
+    context.service._notify = MagicMock()
+
+@when('I choose candidate number {index:d} in the web UI')
+def step_impl(context, index):
+    context.service.nano_client = MagicMock()
+    context.service.nano_client.save_selection.return_value = "saved_image.png"
+    # Ensure index is int
+    idx = int(index)
+    context.service.select_image(idx - 1)
+
+@then('a SYSTEM message should be sent to the agent')
+def step_impl(context):
+    assert context.service.agent.chat.called
+    args = context.service.agent.chat.call_args
+    assert "[SYSTEM]" in args[0][0]
+
+@then('the message should contain the saved filename')
+def step_impl(context):
+    args = context.service.agent.chat.call_args
+    # Prompt was "test prompt", index 0 (1st item)
+    # Expected: test_prompt_1.png
+    message = args[0][0]
+    assert "test_prompt_1.png" in message, f"Expected filename not found in message: {message}"

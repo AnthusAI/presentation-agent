@@ -14,6 +14,13 @@ dist/
 .pytest_cache/
 .coverage
 htmlcov/
+venv/
+.venv/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
 
 # Mac
 .DS_Store
@@ -22,7 +29,7 @@ htmlcov/
 .vscode/
 .idea/
 
-# Vibe Presentation specific
+# DeckBot specific
 # Ignore user presentations but keep the folder structure
 presentations/*
 !presentations/.gitkeep
@@ -30,4 +37,5 @@ presentations/*
 # Except we might want to allow committing demo decks?
 # For now, ignore all to be safe and clean.
 
-# Ignore local templates if we want? No, templates/ is part of the repo.
+# User preferences
+.deckbot.yaml
