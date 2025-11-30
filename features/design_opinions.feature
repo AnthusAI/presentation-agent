@@ -17,4 +17,3 @@ Feature: Template Design Opinions
     And a presentation uses the "BlankTheme" template
     When I initialize the agent
     Then the system prompt should not contain "Prefer using Lucide icons"
-

@@ -151,6 +151,12 @@ class Agent:
                 current_aspect_ratio = aspect_ratio
         except Exception:
             pass
+
+        final_design_section = design_opinions_section if design_opinions_section else """
+## Design & Aesthetics
+1. **Clean Layouts**: Use ample whitespace.
+2. **Visuals**: Prefer high-quality images (generated or provided) over cluttered text.
+"""
         
         return f"""
 You are "DeckBot", a helpful AI assistant for creating Marp (Markdown) presentations.
@@ -166,7 +172,9 @@ Description: {self.context.get('description', '')}
 2. Manage the files directly. Use 'write_file' to create or update slides.
 3. Create visuals using 'generate_image'.
 4. Always keep the "Vibe" in mind: Professional but enthusiastic, clean, and modern.
-{design_opinions_section}
+
+{final_design_section}
+
 ## Marp Documentation
 {marp_docs}
 
