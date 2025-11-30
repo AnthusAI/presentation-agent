@@ -27,3 +27,13 @@ Feature: Nano Banana Image Generation
     When I choose candidate number 1 in the web UI
     Then a SYSTEM message should be sent to the agent
     And the message should contain the saved filename
+
+  Scenario: Default aspect ratio matches presentation
+    Given I have a presentation with aspect ratio "16:9"
+    When the agent generates an image without specifying aspect ratio
+    Then the image should be generated with aspect ratio "16:9"
+
+  Scenario: Override presentation aspect ratio
+    Given I have a presentation with aspect ratio "16:9"
+    When the agent generates a square image
+    Then the image should be generated with aspect ratio "1:1"

@@ -237,19 +237,23 @@ class PresentationTools:
         except Exception as e:
             return f"Error creating directory: {str(e)}"
 
-    def generate_image(self, prompt: str, aspect_ratio: str = "1:1", resolution: str = "2K"):
+    def generate_image(self, prompt: str, aspect_ratio: str = None, resolution: str = "2K"):
         """
         Generates an image using Nano Banana.
         
         Args:
             prompt: The image description
-            aspect_ratio: Aspect ratio (1:1, 16:9, 9:16, 4:3, 3:4)
+            aspect_ratio: Aspect ratio (1:1, 16:9, 9:16, 4:3, 3:4). If None, uses presentation's aspect ratio.
             resolution: Image resolution (1K, 2K, 4K)
         
         In CLI mode: Synchronously generates, displays, and waits for selection.
         In Web mode: Triggers async generation and returns immediately. The system will
                      call the agent again after user selects an image.
         """
+        # If no aspect ratio specified, use the presentation's aspect ratio
+        if aspect_ratio is None:
+            aspect_ratio = self.get_aspect_ratio() or "4:3"  # fallback to 4:3 if not set
+        
         # Check if we have an image generation callback (indicates web mode)
         if hasattr(self, 'on_image_generation'):
             # Web mode: Trigger the full async workflow

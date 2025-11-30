@@ -74,6 +74,22 @@ class NanoBananaClient:
         final_prompt = prompt
         if style_prompt:
             final_prompt = f"{prompt}. Style instructions: {style_prompt}"
+        
+        # Add aspect ratio instruction to prompt for Gemini native image generation
+        aspect_ratio_instruction = {
+            "1:1": "square image (1:1 aspect ratio)",
+            "16:9": "wide landscape image (16:9 aspect ratio)",
+            "9:16": "tall portrait image (9:16 aspect ratio)",
+            "4:3": "landscape image (4:3 aspect ratio)",
+            "3:4": "portrait image (3:4 aspect ratio)",
+            "3:2": "landscape image (3:2 aspect ratio)",
+            "2:3": "portrait image (2:3 aspect ratio)",
+            "4:5": "portrait image (4:5 aspect ratio)",
+            "5:4": "landscape image (5:4 aspect ratio)",
+            "21:9": "ultra-wide image (21:9 aspect ratio)"
+        }.get(aspect_ratio, f"image with {aspect_ratio} aspect ratio")
+        
+        final_prompt = f"Generate a {aspect_ratio_instruction}. {final_prompt}"
             
         if status_spinner:
             status_spinner.start() # Resume

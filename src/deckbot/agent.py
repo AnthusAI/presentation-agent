@@ -87,6 +87,15 @@ class Agent:
             # Fallback or warn if needed, but for now just keep it empty
             pass
             
+        # Get current presentation aspect ratio
+        current_aspect_ratio = "4:3"  # default
+        try:
+            aspect_ratio = self.tools_handler.get_aspect_ratio()
+            if aspect_ratio:
+                current_aspect_ratio = aspect_ratio
+        except Exception:
+            pass
+            
         # Template instructions from metadata
         template_instructions = ""
         try:
@@ -117,6 +126,9 @@ Description: {self.context.get('description', '')}
 ## Marp Documentation
 {marp_docs}
 
+## Current Presentation Settings
+- Aspect Ratio: {current_aspect_ratio}
+
 ## Capabilities & Tools
 - Use 'list_files' to see what slides exist.
 - Use 'read_file' to read slide content (though full context is provided above).
@@ -124,8 +136,9 @@ Description: {self.context.get('description', '')}
 - Use 'copy_file', 'move_file', 'delete_file', 'create_directory' to organize and manage files within the presentation.
 - Use 'generate_image' to create visuals. 
   - You can specify 'aspect_ratio' (e.g., "1:1", "16:9", "9:16", "4:3") and 'resolution' ("1K", "2K", "4K"). 
-  - Default is 1:1 2K. 
-  - Consider the slide layout when choosing aspect ratio.
+  - **Default aspect ratio is {current_aspect_ratio} (matching the presentation)** unless the user requests otherwise.
+  - Default resolution is 2K.
+  - Consider the slide layout when choosing aspect ratio - if the user asks for a "square image" use "1:1", "landscape" use "16:9", etc.
   - **IMPORTANT**: When you call this, the system will generate candidates and let the user pick. DO NOT write any files that reference the image until you receive a [SYSTEM] message confirming which image was selected.
 - Use 'get_aspect_ratio' and 'set_aspect_ratio' to manage presentation aspect ratio (e.g., "16:9", "4:3"). Changing this recompiles the deck.
 - Use 'compile_presentation' to BUILD and PREVIEW the actual slide deck (opens HTML). Use this when the user wants to "see the deck" or "preview".

@@ -701,21 +701,19 @@ body {
   flex: 1;
   padding: 20px;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  align-content: start;
+  display: block;
 }
 
 .image-card {
   position: relative;
-  width: 100%;
   border-radius: var(--radius);
   overflow: hidden;
   cursor: pointer;
   border: 2px solid transparent;
   transition: all 0.2s;
   background: hsl(var(--muted));
+  margin: 0 auto 16px auto;
+  display: inline-block;
 }
 
 .image-card:hover {
@@ -725,9 +723,9 @@ body {
 }
 
 .image-card img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  max-width: 100%;
+  height: auto;
+  display: block;
 }
 
 .placeholder {

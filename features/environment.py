@@ -23,7 +23,7 @@ def before_scenario(context, scenario):
         except:
             pass
     
-    # Mock Google Generative AI to avoid real API calls during tests
+    # Mock OLD Google Generative AI SDK to avoid real API calls during tests
     # This prevents "Could not initialize any Gemini model" errors
     context.genai_configure_patch = patch('google.generativeai.configure')
     context.genai_model_patch = patch('google.generativeai.GenerativeModel')
@@ -31,13 +31,26 @@ def before_scenario(context, scenario):
     context.mock_configure = context.genai_configure_patch.start()
     context.mock_model_cls = context.genai_model_patch.start()
     
-    # Set up default mock behavior
+    # Set up default mock behavior for old SDK
     mock_instance = MagicMock()
     mock_chat_session = MagicMock()
     mock_chat_session.send_message.return_value.text = "Mock AI response"
     mock_chat_session.history = []
     mock_instance.start_chat.return_value = mock_chat_session
     context.mock_model_cls.return_value = mock_instance
+    
+    # Mock NEW Google Generative AI SDK (google.genai) to avoid real API calls
+    context.new_genai_client_patch = patch('google.genai.Client')
+    context.mock_new_client_cls = context.new_genai_client_patch.start()
+    
+    # Set up mock behavior for new SDK (used by NanoBananaClient)
+    mock_new_client = MagicMock()
+    mock_response = MagicMock()
+    mock_part = MagicMock()
+    mock_part.inline_data.data = b"fake_image_data"
+    mock_response.parts = [mock_part]
+    mock_new_client.models.generate_content.return_value = mock_response
+    context.mock_new_client_cls.return_value = mock_new_client
     
     # Ensure GOOGLE_API_KEY is set for tests (from .env or set a fake one)
     if not os.getenv('GOOGLE_API_KEY'):
@@ -49,6 +62,8 @@ def after_scenario(context, scenario):
         context.genai_configure_patch.stop()
     if hasattr(context, 'genai_model_patch'):
         context.genai_model_patch.stop()
+    if hasattr(context, 'new_genai_client_patch'):
+        context.new_genai_client_patch.stop()
     
     # Clean up any preferences files created during tests
     from pathlib import Path
