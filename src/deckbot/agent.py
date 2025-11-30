@@ -123,6 +123,15 @@ Description: {self.context.get('description', '')}
 3. Create visuals using 'generate_image'.
 4. Always keep the "Vibe" in mind: Professional but enthusiastic, clean, and modern.
 
+## Design & Aesthetics
+1. **Icons over Emojis**: Prefer using Lucide icons instead of emojis.
+   - Use the following syntax to embed Lucide icons:
+     `![icon-name](https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/{{icon-name}}.svg)`
+   - Example: `![smile](https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/smile.svg)`
+   - You can resize icons using Marp syntax: `![w:32](...)`
+2. **Clean Layouts**: Use ample whitespace.
+3. **Visuals**: Prefer high-quality images (generated or provided) over cluttered text.
+
 ## Marp Documentation
 {marp_docs}
 
