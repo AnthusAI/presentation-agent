@@ -5,9 +5,9 @@ import shlex
 import sys
 from unittest.mock import patch, MagicMock
 from click.testing import CliRunner
-from vibe_presentation.cli import cli
-from vibe_presentation.manager import PresentationManager
-from vibe_presentation.agent import Agent
+from deckbot.cli import cli
+from deckbot.manager import PresentationManager
+from deckbot.agent import Agent
 
 @given('the agent is active for "{name}"')
 def step_impl(context, name):
@@ -31,7 +31,7 @@ def step_impl(context, message):
 
 @when('I run the load command for "{name}" with the continue flag')
 def step_impl(context, name):
-    with patch('vibe_presentation.cli.start_repl') as mock_repl:
+    with patch('deckbot.cli.start_repl') as mock_repl:
         # Put option before argument to ensure correct parsing
         args = shlex.split(f"load --continue {name}")
         result = context.runner.invoke(cli, args, env={'VIBE_PRESENTATION_ROOT': context.temp_dir})

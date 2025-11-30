@@ -7,8 +7,8 @@ import sys
 from unittest.mock import patch
 from behave import given, when, then, fixture, use_fixture
 from click.testing import CliRunner
-from vibe_presentation.cli import cli
-from vibe_presentation.manager import PresentationManager
+from deckbot.cli import cli
+from deckbot.manager import PresentationManager
 
 # Environment management
 @fixture
@@ -52,12 +52,12 @@ def step_impl(context, command):
         # We force import error by patching builtins.__import__? No, that's dangerous.
         # We patch sys.modules to make the target module return None or raise error.
         # Setting to None typically causes ImportError/ModuleNotFoundError
-        with patch.dict(sys.modules, {'vibe_presentation.webapp': None}):
+        with patch.dict(sys.modules, {'deckbot.webapp': None}):
              context.result = context.runner.invoke(cli, args, env=env)
     elif '--web' in command or '-w' in command:
         # Mock the app.run call to prevent server from actually starting/blocking
         # We mock the module that is imported
-        with patch('vibe_presentation.webapp.app') as mock_app:
+        with patch('deckbot.webapp.app') as mock_app:
             context.mock_app = mock_app
             context.result = context.runner.invoke(cli, args, env=env)
     else:

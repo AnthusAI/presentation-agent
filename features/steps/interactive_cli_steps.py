@@ -1,8 +1,8 @@
 from behave import given, when, then
 from unittest.mock import patch, MagicMock
 from click.testing import CliRunner
-from vibe_presentation.cli import cli
-from vibe_presentation.manager import PresentationManager
+from deckbot.cli import cli
+from deckbot.manager import PresentationManager
 import os
 
 @when('I run the CLI without arguments and select "{selection}"')
@@ -17,7 +17,7 @@ def step_impl(context, selection):
     except StopIteration:
         user_input = selection 
         
-    with patch('vibe_presentation.cli.start_repl') as mock_repl:
+    with patch('deckbot.cli.start_repl') as mock_repl:
         # Patch Prompt.ask to return input. 
         # NOTE: If implementation uses IntPrompt for selection, we need to patch that too or instead.
         # If we patch Prompt.ask with a string "1", IntPrompt might not like it if it expects return from user.
@@ -33,7 +33,7 @@ def step_impl(context, selection):
 
 @when('I run the CLI without arguments and choose to create "{name}"')
 def step_impl(context, name):
-    with patch('vibe_presentation.cli.start_repl') as mock_repl:
+    with patch('deckbot.cli.start_repl') as mock_repl:
         # We expect Prompt.ask for "No presentations found. Create one?" -> "y"
         # Then Name
         # Then Description

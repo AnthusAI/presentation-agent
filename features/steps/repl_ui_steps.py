@@ -1,9 +1,9 @@
 from behave import given, when, then
 from unittest.mock import patch, MagicMock, call
 import shlex
-from vibe_presentation.cli import cli
-from vibe_presentation.repl import start_repl
-from vibe_presentation.manager import PresentationManager
+from deckbot.cli import cli
+from deckbot.repl import start_repl
+from deckbot.manager import PresentationManager
 
 @when('I execute the load command for "{name}" and type "{command}"')
 def step_impl(context, name, command):
@@ -23,9 +23,9 @@ def step_impl(context, name, command):
         # "exit cleanly" means the function returns.
         
         # We need to mock SessionService to avoid IO
-        with patch('vibe_presentation.repl.SessionService') as MockSessionService, \
-             patch('vibe_presentation.repl.Console') as mock_console_cls, \
-             patch('vibe_presentation.repl.console') as mock_console_instance:
+        with patch('deckbot.repl.SessionService') as MockSessionService, \
+             patch('deckbot.repl.Console') as mock_console_cls, \
+             patch('deckbot.repl.console') as mock_console_instance:
             
             # Mock the SessionService instance
             mock_service = MockSessionService.return_value
@@ -108,9 +108,9 @@ def step_impl(context, name):
     with patch('rich.prompt.Prompt.ask') as mock_prompt:
         mock_prompt.side_effect = ["/exit"]
         
-        with patch('vibe_presentation.repl.SessionService') as MockSessionService, \
-             patch('vibe_presentation.repl.Console') as mock_console_cls, \
-             patch('vibe_presentation.repl.console') as mock_console_instance:
+        with patch('deckbot.repl.SessionService') as MockSessionService, \
+             patch('deckbot.repl.Console') as mock_console_cls, \
+             patch('deckbot.repl.console') as mock_console_instance:
             
             # Mock the SessionService instance
             mock_service = MockSessionService.return_value

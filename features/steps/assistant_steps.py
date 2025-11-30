@@ -1,8 +1,8 @@
 from behave import given, when, then
 from unittest.mock import patch, MagicMock
-from vibe_presentation.cli import cli
-from vibe_presentation.agent import Agent
-from vibe_presentation.manager import PresentationManager
+from deckbot.cli import cli
+from deckbot.agent import Agent
+from deckbot.manager import PresentationManager
 import os
 
 @given('I run the load command for "{name}"')
@@ -13,7 +13,7 @@ def step_impl(context, name):
 @when('I run the load command for "{name}"')
 def step_impl(context, name):
     # Mocking the REPL to avoid infinite loop
-    with patch('vibe_presentation.cli.start_repl') as mock_repl:
+    with patch('deckbot.cli.start_repl') as mock_repl:
         import shlex
         args = shlex.split(f"load {name}")
         context.result = context.runner.invoke(cli, args, env={'VIBE_PRESENTATION_ROOT': context.temp_dir})
@@ -59,7 +59,8 @@ def step_impl(context, name):
     context.agent_mock.chat.return_value = "Sure, here is an outline."
     
     # We are testing the Agent logic directly here mostly
-    with patch('google.generativeai.GenerativeModel') as mock_model:
+    with patch('google.generativeai.GenerativeModel') as mock_model, \
+         patch('google.generativeai.configure'):
         context.real_agent = Agent(presentation)
         context.real_agent.model = mock_model
         context.real_agent.chat_session = MagicMock()
@@ -67,24 +68,23 @@ def step_impl(context, name):
 
 @when('I type "{message}"')
 def step_impl(context, message):
-    # Ensure real_agent is set up if not already
-    if not hasattr(context, 'real_agent'):
-        manager = PresentationManager(root_dir=context.temp_dir)
-        presentation = manager.get_presentation("history-test") # fallback or default
-        if not presentation:
-             manager.create_presentation("history-test", "")
-             presentation = manager.get_presentation("history-test")
-        context.real_agent = Agent(presentation)
-
-    # Patch GenerativeModel again because Agent.chat() re-instantiates it
-    with patch('google.generativeai.GenerativeModel') as mock_model_cls:
+    # Patch GenerativeModel BEFORE creating Agent to avoid API initialization errors
+    with patch('google.generativeai.GenerativeModel') as mock_model_cls, \
+         patch('google.generativeai.configure'):
         mock_instance = mock_model_cls.return_value
         mock_chat_session = MagicMock()
         mock_chat_session.send_message.return_value.text = "Sure, here is an outline."
+        mock_chat_session.history = []
         mock_instance.start_chat.return_value = mock_chat_session
         
-        # We need to make sure context.real_agent uses this mocked class logic
-        # Since Agent imports google.generativeai, patching it in sys.modules via patch works
+        # Ensure real_agent is set up if not already
+        if not hasattr(context, 'real_agent'):
+            manager = PresentationManager(root_dir=context.temp_dir)
+            presentation = manager.get_presentation("history-test") # fallback or default
+            if not presentation:
+                 manager.create_presentation("history-test", "")
+                 presentation = manager.get_presentation("history-test")
+            context.real_agent = Agent(presentation)
         
         context.response = context.real_agent.chat(message)
         

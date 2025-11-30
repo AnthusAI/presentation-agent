@@ -2,7 +2,7 @@ from rich.console import Console
 from rich.prompt import Prompt, IntPrompt
 from rich.markdown import Markdown
 from rich.panel import Panel
-from vibe_presentation.session_service import SessionService
+from deckbot.session_service import SessionService
 
 console = Console()
 

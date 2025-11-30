@@ -1,7 +1,7 @@
 from behave import given, when, then
 from unittest.mock import MagicMock, patch
-from vibe_presentation.manager import PresentationManager
-from vibe_presentation.nano_banana import NanoBananaClient
+from deckbot.manager import PresentationManager
+from deckbot.nano_banana import NanoBananaClient
 import os
 import json
 
@@ -52,7 +52,7 @@ def step_impl(context, prompt, deck_name):
     # We need to patch PIL.Image.open because our fake image is invalid
     # Also patch _open_folder to prevent opening files in Finder
     with patch('PIL.Image.open') as mock_open, \
-         patch('vibe_presentation.nano_banana.NanoBananaClient._open_folder'):
+         patch('deckbot.nano_banana.NanoBananaClient._open_folder'):
         mock_image = MagicMock()
         mock_open.return_value = mock_image
         

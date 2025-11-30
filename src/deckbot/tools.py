@@ -1,9 +1,10 @@
 import os
 import subprocess
+import shutil
 from rich.console import Console
 from rich.prompt import IntPrompt
-from vibe_presentation.nano_banana import NanoBananaClient
-from vibe_presentation.manager import PresentationManager
+from deckbot.nano_banana import NanoBananaClient
+from deckbot.manager import PresentationManager
 
 console = Console()
 
@@ -17,6 +18,9 @@ class PresentationTools:
         # Hook for notifying updates (e.g., presentation compiled)
         self.on_presentation_updated = None
         
+        # Hook for tool call events (start, end, error)
+        self.on_tool_call = None
+        
         # Resolve presentation root
         env_root = os.environ.get('VIBE_PRESENTATION_ROOT')
         if env_root:
@@ -28,6 +32,24 @@ class PresentationTools:
         
         self.presentation_dir = os.path.join(root, presentation_context['name'])
         self.manager = PresentationManager(root_dir=root)
+
+    def _wrap_tool(self, tool_name, func):
+        """Wrapper that notifies before/after tool execution."""
+        def wrapped(*args, **kwargs):
+            if self.on_tool_call:
+                # Mask args for some tools if needed, but generally fine
+                # Convert args to list for JSON serialization if needed
+                self.on_tool_call("tool_start", {"tool": tool_name, "args": args, "kwargs": kwargs})
+            try:
+                result = func(*args, **kwargs)
+                if self.on_tool_call:
+                    self.on_tool_call("tool_end", {"tool": tool_name, "result": str(result)})
+                return result
+            except Exception as e:
+                if self.on_tool_call:
+                    self.on_tool_call("tool_error", {"tool": tool_name, "error": str(e)})
+                raise e # Re-raise to let Gemini handle it
+        return wrapped
 
     def list_presentations(self):
         """Lists all available presentations."""
@@ -118,6 +140,76 @@ class PresentationTools:
             return f"Successfully wrote to {filename}"
         except Exception as e:
             return f"Error writing file: {str(e)}"
+
+    def copy_file(self, source: str, destination: str):
+        """Copy a file within the presentation directory."""
+        src_path = os.path.abspath(os.path.join(self.presentation_dir, source))
+        dst_path = os.path.abspath(os.path.join(self.presentation_dir, destination))
+        
+        if not src_path.startswith(os.path.abspath(self.presentation_dir)):
+            return "Error: Source path outside presentation directory."
+        if not dst_path.startswith(os.path.abspath(self.presentation_dir)):
+            return "Error: Destination path outside presentation directory."
+            
+        if not os.path.exists(src_path):
+            return f"Error: Source file '{source}' not found."
+            
+        try:
+            shutil.copy2(src_path, dst_path)
+            return f"Successfully copied '{source}' to '{destination}'"
+        except Exception as e:
+            return f"Error copying file: {str(e)}"
+
+    def move_file(self, source: str, destination: str):
+        """Move/rename a file within the presentation directory."""
+        src_path = os.path.abspath(os.path.join(self.presentation_dir, source))
+        dst_path = os.path.abspath(os.path.join(self.presentation_dir, destination))
+        
+        if not src_path.startswith(os.path.abspath(self.presentation_dir)):
+            return "Error: Source path outside presentation directory."
+        if not dst_path.startswith(os.path.abspath(self.presentation_dir)):
+            return "Error: Destination path outside presentation directory."
+            
+        if not os.path.exists(src_path):
+            return f"Error: Source file '{source}' not found."
+            
+        try:
+            shutil.move(src_path, dst_path)
+            return f"Successfully moved '{source}' to '{destination}'"
+        except Exception as e:
+            return f"Error moving file: {str(e)}"
+
+    def delete_file(self, filename: str):
+        """Delete a file from the presentation directory."""
+        path = os.path.abspath(os.path.join(self.presentation_dir, filename))
+        
+        if not path.startswith(os.path.abspath(self.presentation_dir)):
+            return "Error: Path outside presentation directory."
+            
+        if not os.path.exists(path):
+            return f"Error: File '{filename}' not found."
+            
+        try:
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
+            return f"Successfully deleted '{filename}'"
+        except Exception as e:
+            return f"Error deleting file: {str(e)}"
+
+    def create_directory(self, dirname: str):
+        """Create a subdirectory within the presentation."""
+        path = os.path.abspath(os.path.join(self.presentation_dir, dirname))
+        
+        if not path.startswith(os.path.abspath(self.presentation_dir)):
+            return "Error: Path outside presentation directory."
+            
+        try:
+            os.makedirs(path, exist_ok=True)
+            return f"Successfully created directory '{dirname}'"
+        except Exception as e:
+            return f"Error creating directory: {str(e)}"
 
     def generate_image(self, prompt: str):
         """

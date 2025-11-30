@@ -2,10 +2,10 @@ import os
 import json
 import shutil
 from behave import given, when, then
-from vibe_presentation.manager import PresentationManager
-from vibe_presentation.tools import PresentationTools
+from deckbot.manager import PresentationManager
+from deckbot.tools import PresentationTools
 from click.testing import CliRunner
-from vibe_presentation.cli import cli
+from deckbot.cli import cli
 from unittest.mock import MagicMock, patch
 
 @given('the template directory exists')
@@ -114,7 +114,7 @@ def step_impl(context, name, template):
 
 @when('I load the presentation "{name}"')
 def step_impl(context, name):
-    from vibe_presentation.agent import Agent
+    from deckbot.agent import Agent
     
     manager = PresentationManager(root_dir=context.temp_dir) # Use temp_dir for persistence
     presentation = manager.get_presentation(name)

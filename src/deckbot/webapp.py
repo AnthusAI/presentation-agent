@@ -3,9 +3,9 @@ import json
 import time
 import threading
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context, send_file, send_from_directory
-from vibe_presentation.manager import PresentationManager
-from vibe_presentation.session_service import SessionService
-from vibe_presentation.preferences import PreferencesManager
+from deckbot.manager import PresentationManager
+from deckbot.session_service import SessionService
+from deckbot.preferences import PreferencesManager
 
 app = Flask(__name__)
 

@@ -1,10 +1,10 @@
 from behave import given, when, then
 from unittest.mock import MagicMock, patch
-from vibe_presentation.session_service import SessionService
+from deckbot.session_service import SessionService
 
 @given("I'm chatting with the agent in web UI")
 def step_impl(context):
-    with patch('vibe_presentation.session_service.Agent') as MockAgent:
+    with patch('deckbot.session_service.Agent') as MockAgent:
         # We need the mock to survive beyond the with block for the service to use it
         # But patch undoes changes on exit. 
         # However, SessionService stores the instance in self.agent.
@@ -96,7 +96,7 @@ def step_impl(context):
 
 @given("two browser tabs are open")
 def step_impl(context):
-    with patch('vibe_presentation.session_service.Agent'):
+    with patch('deckbot.session_service.Agent'):
         context.service = SessionService({})
     
     context.tab1_events = []

@@ -1,14 +1,10 @@
 import click
 import subprocess
 import os
-from dotenv import load_dotenv
 from rich.console import Console
 from rich.prompt import Prompt, IntPrompt
-from vibe_presentation.manager import PresentationManager
-from vibe_presentation.repl import start_repl
-
-# Load environment variables from .env file
-load_dotenv()
+from deckbot.manager import PresentationManager
+from deckbot.repl import start_repl
 
 console = Console()
 
@@ -48,7 +44,7 @@ def cli(ctx, resume, web, port):
     """Vibe-Coded Presentation CLI"""
     if web:
         try:
-            from vibe_presentation.webapp import app
+            from deckbot.webapp import app
             console.print(f"[green]Starting Web UI on http://localhost:{port}[/green]")
             app.run(port=port, debug=True)
         except ImportError:

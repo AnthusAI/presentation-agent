@@ -1,7 +1,7 @@
 from behave import given, when, then
 from unittest.mock import patch
-from vibe_presentation.cli import cli
-from vibe_presentation.manager import PresentationManager
+from deckbot.cli import cli
+from deckbot.manager import PresentationManager
 import shlex
 import os
 

@@ -32,7 +32,7 @@ dependencies = [
 "Homepage" = "https://github.com/yourusername/deckbot"
 
 [project.scripts]
-deckbot = "vibe_presentation.cli:cli"
+deckbot = "deckbot.cli:cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]

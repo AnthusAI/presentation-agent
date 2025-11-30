@@ -4,7 +4,7 @@ import tempfile
 import shutil
 from behave import given, when, then
 from unittest.mock import patch
-from vibe_presentation.preferences import PreferencesManager
+from deckbot.preferences import PreferencesManager
 
 @given('I am using DeckBot for the first time')
 def step_impl(context):

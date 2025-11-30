@@ -664,6 +664,29 @@ document.addEventListener('DOMContentLoaded', () => {
         imageGallery.innerHTML = '<p class="placeholder">Image saved. Incorporating into presentation...</p>';
     });
 
+    evtSource.addEventListener("tool_start", (e) => {
+        const data = JSON.parse(e.data);
+        // appendSystemMessage(`🔧 Using tool: ${data.tool}`);
+        // Skipping start message to reduce noise, or maybe show a temporary status?
+        // For now let's just log it or show it.
+        console.log("Tool start:", data);
+    });
+
+    evtSource.addEventListener("tool_end", (e) => {
+        const data = JSON.parse(e.data);
+        // Truncate long results
+        let result = data.result || "";
+        if (result.length > 200) {
+            result = result.substring(0, 200) + "...";
+        }
+        appendSystemMessage(`✓ Used tool ${data.tool}: ${result}`);
+    });
+
+    evtSource.addEventListener("tool_error", (e) => {
+        const data = JSON.parse(e.data);
+        appendSystemMessage(`✗ Tool ${data.tool} error: ${data.error}`);
+    });
+
     evtSource.addEventListener("presentation_updated", (e) => {
         console.log("Presentation updated, reloading preview...");
         reloadPreview();

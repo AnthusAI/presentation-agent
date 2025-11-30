@@ -2,9 +2,9 @@ from behave import given, when, then
 import os
 import json
 from unittest.mock import MagicMock
-from vibe_presentation.tools import PresentationTools
-from vibe_presentation.manager import PresentationManager
-from vibe_presentation.agent import Agent
+from deckbot.tools import PresentationTools
+from deckbot.manager import PresentationManager
+from deckbot.agent import Agent
 
 @given('I have a presentation named "{name}" created at "{timestamp}"')
 def step_impl(context, name, timestamp):

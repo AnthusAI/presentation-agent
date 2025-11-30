@@ -1,7 +1,7 @@
 from behave import given, when, then
 from unittest.mock import patch
-from vibe_presentation.cli import cli
-from vibe_presentation.manager import PresentationManager
+from deckbot.cli import cli
+from deckbot.manager import PresentationManager
 
 @when('I start the interactive CLI')
 def step_impl(context):
@@ -23,7 +23,7 @@ def step_impl(context, name):
     context.cli_inputs.append("Description")
     
     # Execute here since this is the last step
-    with patch('vibe_presentation.cli.start_repl') as mock_repl:
+    with patch('deckbot.cli.start_repl') as mock_repl:
         with patch('rich.prompt.Prompt.ask', side_effect=context.cli_inputs) as mock_prompt:
              result = context.runner.invoke(cli, args=[], env={'VIBE_PRESENTATION_ROOT': context.temp_dir})
              context.result = result

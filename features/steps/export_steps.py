@@ -1,8 +1,8 @@
 from behave import given, when, then
 import os
 from unittest.mock import MagicMock, patch
-from vibe_presentation.tools import PresentationTools
-from vibe_presentation.manager import PresentationManager
+from deckbot.tools import PresentationTools
+from deckbot.manager import PresentationManager
 
 @when('the agent uses the "export_pdf" tool')
 def step_impl(context):

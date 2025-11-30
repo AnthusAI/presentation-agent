@@ -33,7 +33,7 @@ class NanoBananaClient:
         if not os.path.exists(self.drafts_dir):
             os.makedirs(self.drafts_dir)
 
-        self.api_key = os.getenv("GOOGLE_AI_STUDIO_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        self.api_key = os.getenv("GOOGLE_API_KEY")
         if self.api_key:
              genai.configure(api_key=self.api_key)
              # Use 'models/nano-banana-pro-preview' as requested
@@ -112,7 +112,9 @@ class NanoBananaClient:
         for i in range(4):
             if progress_callback:
                 progress_callback(i+1, 4, f"Generating image {i+1}/4...", candidates)
-            console.print(f"  Generating candidate {i+1}/4...")
+            import sys
+            if 'behave' not in sys.modules:
+                console.print(f"  Generating candidate {i+1}/4...")
             try:
                 # Gemini 2.0 Flash Exp supports generating images via text prompt
                 response = model.generate_content(generation_input)
@@ -141,18 +143,24 @@ class NanoBananaClient:
                     # Let's try the specific image model from the list we saw earlier if this fails:
                     # 'models/imagen-3.0-generate-001' was missing, but 'models/gemini-2.0-flash-exp' was there.
                     # If this fails, we might need to use the REST API directly if the SDK is hiding the image capability.
-                    console.print(f"  [red]No image found in response for candidate {i+1}[/red]")
+                    import sys
+                    if 'behave' not in sys.modules:
+                        console.print(f"  [red]No image found in response for candidate {i+1}[/red]")
                     candidates.append(self._create_dummy(request_folder, i+1))
                     if progress_callback:
                         progress_callback(i+1, 4, f"Generated image {i+1}/4 (fallback)", candidates)
 
             except ResourceExhausted:
-                console.print(f"  [red]Quota exceeded for candidate {i+1}. Please try again later.[/red]")
+                import sys
+                if 'behave' not in sys.modules:
+                    console.print(f"  [red]Quota exceeded for candidate {i+1}. Please try again later.[/red]")
                 candidates.append(self._create_dummy(request_folder, i+1))
                 if progress_callback:
                     progress_callback(i+1, 4, f"Generated image {i+1}/4 (quota exceeded)", candidates)
             except Exception as e:
-                console.print(f"  [red]Error generating candidate {i+1}: {e}[/red]")
+                import sys
+                if 'behave' not in sys.modules:
+                    console.print(f"  [red]Error generating candidate {i+1}: {e}[/red]")
                 candidates.append(self._create_dummy(request_folder, i+1))
                 if progress_callback:
                     progress_callback(i+1, 4, f"Generated image {i+1}/4 (error)", candidates)

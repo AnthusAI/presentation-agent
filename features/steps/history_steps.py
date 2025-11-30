@@ -2,9 +2,9 @@ from behave import given, when, then
 from unittest.mock import patch, MagicMock
 import os
 import json
-from vibe_presentation.cli import cli
-from vibe_presentation.agent import Agent
-from vibe_presentation.manager import PresentationManager
+from deckbot.cli import cli
+from deckbot.agent import Agent
+from deckbot.manager import PresentationManager
 
 @then('the message "{message}" should be logged to "{filepath}"')
 def step_impl(context, message, filepath):
@@ -75,7 +75,7 @@ def step_impl(context, message):
 
 @when('I run the load command for "{name}" with the --continue flag')
 def step_impl(context, name):
-    with patch('vibe_presentation.cli.start_repl') as mock_repl:
+    with patch('deckbot.cli.start_repl') as mock_repl:
         import shlex
         # Make sure the patch is applied to where it is IMPORTED in cli.py
         # context.runner.invoke loads the module, so the patch must be active during invoke

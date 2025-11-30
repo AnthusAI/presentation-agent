@@ -1,8 +1,8 @@
 from behave import given, when, then
 from unittest.mock import MagicMock, patch
 import os
-from vibe_presentation.manager import PresentationManager
-from vibe_presentation.session_service import SessionService
+from deckbot.manager import PresentationManager
+from deckbot.session_service import SessionService
 
 @given('I have a slide "{filename}" with content "{content}"')
 def step_impl(context, filename, content):

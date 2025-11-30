@@ -1,6 +1,6 @@
 <img src="assets/deckbot-logo.png" alt="DeckBot Logo" align="right" width="300">
 
-# DeckBot: Vibe-Coded Presentation Assistant
+# DeckBot: Vibe-code your presentations in minutes
 
 This is a CLI AI assistant, similar to tools like Claude Code or the Gemini CLI, but specialized for creating presentation slide decks with **Marp**. Marp is a declarative system that lets you define presentations using Markdown, which can then be viewed as interactive HTML or exported to PDF.
 

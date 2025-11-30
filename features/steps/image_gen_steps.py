@@ -1,9 +1,9 @@
 from behave import given, when, then
 from unittest.mock import patch, MagicMock
-from vibe_presentation.nano_banana import NanoBananaClient
-from vibe_presentation.manager import PresentationManager
-from vibe_presentation.tools import PresentationTools
-from vibe_presentation.session_service import SessionService
+from deckbot.nano_banana import NanoBananaClient
+from deckbot.manager import PresentationManager
+from deckbot.tools import PresentationTools
+from deckbot.session_service import SessionService
 import os
 import shutil
 
@@ -19,7 +19,7 @@ def step_impl(context, name):
 def step_impl(context, prompt):
     # Mock google.generativeai.GenerativeModel
     with patch('google.generativeai.GenerativeModel') as mock_model_cls, \
-         patch('vibe_presentation.nano_banana.NanoBananaClient._open_folder') as mock_open:
+         patch('deckbot.nano_banana.NanoBananaClient._open_folder') as mock_open:
         mock_model = mock_model_cls.return_value
         
         # Mock successful generation response
@@ -93,7 +93,7 @@ def step_impl(context):
     context.mock_callback = MagicMock()
     
     # Mock NanoBananaClient
-    with patch('vibe_presentation.tools.NanoBananaClient') as MockNano:
+    with patch('deckbot.tools.NanoBananaClient') as MockNano:
         context.nano_client = MockNano.return_value
         context.tools = PresentationTools({'name': 'test-deck'}, context.nano_client)
         # Enable web mode
@@ -119,7 +119,7 @@ def step_impl(context):
 def step_impl(context):
     # Setup SessionService in waiting state
     # We need to patch Agent to avoid real init if we don't want IO/API calls
-    with patch('vibe_presentation.session_service.Agent'):
+    with patch('deckbot.session_service.Agent'):
         context.service = SessionService({'name': 'test-deck'})
     
     context.service.agent = MagicMock()

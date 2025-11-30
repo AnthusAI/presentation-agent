@@ -2,8 +2,8 @@ import os
 import json
 import threading
 from typing import Optional, List, Dict, Callable, Any
-from vibe_presentation.agent import Agent
-from vibe_presentation.nano_banana import NanoBananaClient
+from deckbot.agent import Agent
+from deckbot.nano_banana import NanoBananaClient
 
 class SessionService:
     def __init__(self, presentation_context: Dict[str, Any]):
@@ -26,11 +26,17 @@ class SessionService:
             self.agent.tools_handler.on_presentation_updated = lambda: self._notify("presentation_updated")
             # Hook image generation requests from the agent
             self.agent.tools_handler.on_image_generation = self._handle_agent_image_request
+            # Hook tool events
+            self.agent.tools_handler.on_tool_call = self._handle_tool_event
 
     def subscribe(self, callback: Callable[[str, Any], None]):
         """Subscribe to events. Callback receives (event_type, data)."""
         with self._lock:
             self.listeners.append(callback)
+
+    def _handle_tool_event(self, event_type: str, data: Any):
+        """Forward tool events to listeners."""
+        self._notify(event_type, data)
 
     def _notify(self, event_type: str, data: Any = None):
         with self._lock:

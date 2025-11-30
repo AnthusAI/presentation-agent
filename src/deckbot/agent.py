@@ -2,31 +2,44 @@ import os
 import json
 import google.generativeai as genai
 from rich.console import Console
-from vibe_presentation.nano_banana import NanoBananaClient
-from vibe_presentation.tools import PresentationTools
+from deckbot.nano_banana import NanoBananaClient
+from deckbot.tools import PresentationTools
 
 class Agent:
     def __init__(self, presentation_context):
         self.context = presentation_context
-        self.api_key = os.getenv("GOOGLE_AI_STUDIO_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        self.api_key = os.getenv("GOOGLE_API_KEY")
         
         # Initialize tools
         self.nano_client = NanoBananaClient(presentation_context)
         self.tools_handler = PresentationTools(presentation_context, self.nano_client)
+        
+        # Wrap tools for visibility and patch handler
+        def w(name, original_func):
+            wrapper = self.tools_handler._wrap_tool(name, original_func)
+            # Monkey-patch the handler so direct calls also emit events
+            setattr(self.tools_handler, name, wrapper)
+            return wrapper
+            
+        # Note: We must pass the original methods before they get patched
         self.tools_list = [
-            self.tools_handler.list_files,
-            self.tools_handler.read_file,
-            self.tools_handler.write_file,
-            self.tools_handler.generate_image,
-            self.tools_handler.compile_presentation,
-            self.tools_handler.list_presentations,
-            self.tools_handler.create_presentation,
-            self.tools_handler.load_presentation,
-            self.tools_handler.get_presentation_summary,
-            self.tools_handler.open_presentation_folder,
-            self.tools_handler.export_pdf,
-            self.tools_handler.list_templates,
-            self.tools_handler.preview_template
+            w("list_files", self.tools_handler.list_files),
+            w("read_file", self.tools_handler.read_file),
+            w("write_file", self.tools_handler.write_file),
+            w("copy_file", self.tools_handler.copy_file),
+            w("move_file", self.tools_handler.move_file),
+            w("delete_file", self.tools_handler.delete_file),
+            w("create_directory", self.tools_handler.create_directory),
+            w("generate_image", self.tools_handler.generate_image),
+            w("compile_presentation", self.tools_handler.compile_presentation),
+            w("list_presentations", self.tools_handler.list_presentations),
+            w("create_presentation", self.tools_handler.create_presentation),
+            w("load_presentation", self.tools_handler.load_presentation),
+            w("get_presentation_summary", self.tools_handler.get_presentation_summary),
+            w("open_presentation_folder", self.tools_handler.open_presentation_folder),
+            w("export_pdf", self.tools_handler.export_pdf),
+            w("list_templates", self.tools_handler.list_templates),
+            w("preview_template", self.tools_handler.preview_template)
         ]
 
         # Set up history file path
@@ -54,7 +67,10 @@ class Agent:
             # Initial model init (will be refreshed on chat)
             self._init_model(self._build_system_prompt())
         else:
-            print("Warning: GOOGLE_API_KEY or GOOGLE_AI_STUDIO_API_KEY not found in environment.")
+            import sys
+            # Only print warning if not in test mode
+            if 'behave' not in sys.modules:
+                print("Warning: GOOGLE_API_KEY not found in environment.")
 
     def _build_system_prompt(self):
         # Fetch dynamic content
@@ -103,6 +119,7 @@ Description: {self.context.get('description', '')}
 - Use 'list_files' to see what slides exist.
 - Use 'read_file' to read slide content (though full context is provided above).
 - Use 'write_file' to create or update slides.
+- Use 'copy_file', 'move_file', 'delete_file', 'create_directory' to organize and manage files within the presentation.
 - Use 'generate_image' to create visuals. **IMPORTANT**: When you call this, the system will generate candidates and let the user pick. DO NOT write any files that reference the image until you receive a [SYSTEM] message confirming which image was selected.
 - Use 'compile_presentation' to BUILD and PREVIEW the actual slide deck (opens HTML). Use this when the user wants to "see the deck" or "preview".
 - Use 'export_pdf' to EXPORT the deck to PDF. This requires Chrome/Chromium installed on the system.
@@ -138,7 +155,10 @@ When the user asks for an image:
             except Exception as e:
                 # print(f"Failed to init {model_name}: {e}") # Debugging
                 continue
-        print("Error: Could not initialize any Gemini model. Please check your API key and network connection.")
+        import sys
+        # Only print error if not in test mode
+        if 'behave' not in sys.modules:
+            print("Error: Could not initialize any Gemini model. Please check your API key and network connection.")
 
     def chat(self, user_input, status_spinner=None):
         if not self.model:

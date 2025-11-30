@@ -1,8 +1,8 @@
 from behave import given, when, then
 from unittest.mock import patch, MagicMock, ANY
-from vibe_presentation.cli import cli
-from vibe_presentation.manager import PresentationManager
-from vibe_presentation.repl import start_repl
+from deckbot.cli import cli
+from deckbot.manager import PresentationManager
+from deckbot.repl import start_repl
 import os
 
 @then('the REPL output should NOT contain "{text}"')
@@ -39,9 +39,9 @@ def step_impl_with_resume(context, name, resume_val):
     presentation = manager.get_presentation(name)
     
     # Mock dependencies
-    with patch('vibe_presentation.repl.SessionService') as MockSessionService, \
-         patch('vibe_presentation.repl.Console') as mock_console_cls, \
-         patch('vibe_presentation.repl.console') as mock_console_instance, \
+    with patch('deckbot.repl.SessionService') as MockSessionService, \
+         patch('deckbot.repl.Console') as mock_console_cls, \
+         patch('deckbot.repl.console') as mock_console_instance, \
          patch('rich.prompt.Prompt.ask', side_effect=['/exit']):
         
         mock_service = MockSessionService.return_value
@@ -129,8 +129,8 @@ def step_impl(context, phrase):
 
 @when('I interact with the real Agent for "{name}"')
 def step_impl(context, name):
-    from vibe_presentation.agent import Agent
-    from vibe_presentation.manager import PresentationManager
+    from deckbot.agent import Agent
+    from deckbot.manager import PresentationManager
     
     manager = PresentationManager(root_dir=context.temp_dir)
     presentation = manager.get_presentation(name)
