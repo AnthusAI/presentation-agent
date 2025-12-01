@@ -7,7 +7,11 @@ DeckBot is a different kind of AI presentation tool. It's not a SaaS platform, i
 
 It is a love letter to two emerging AI concepts: **Everything as Code** and **Give an Agent a Tool**.
 
+<img src="assets/diagram-architecture.png" alt="DeckBot Architecture" width="100%">
+
 ## The Concept: "Vibe Coding" for Slides
+
+<img src="assets/diagram-vibe-loop.png" alt="Vibe Coding Loop" align="right" width="350">
 
 Most AI slide generators act like a vending machine: you put in a prompt, and you get a finished product. If you don't like it, you either generate a new one or struggle with a complex drag-and-drop editor.
 
@@ -23,6 +27,9 @@ Because it's just code, you can iterate endlessly. The AI doesn't just "make a d
 ## Why DeckBot?
 
 ### 1. Everything as Code
+
+<img src="assets/diagram-exploded-view.png" alt="Exploded View of Slide Code" align="right" width="350">
+
 Your deck isn't hidden in a database. It's a folder of files on your machine.
 *   **Git-ready:** Version control your presentations like code.
 *   **Interoperable:** Edit the Markdown in VS Code, Obsidian, or Cursor.
@@ -143,5 +150,5 @@ This project is licensed under the MIT License. See the LICENSE file for details
 ---
 
 <p align="center">
-  <i>Built with ❤️, Python, and Gemini. ((And Claude.  And GPT.)</i>
+  <i>Built with ❤️, Python, and Gemini. ((And Claude.  And GPT.  And Nano Banana.)</i>
 </p>
