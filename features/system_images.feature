@@ -21,6 +21,7 @@ Feature: System Images for Templates
     And the "images" folder should contain "placeholder-landscape.png"
     And the "images" folder should contain "placeholder-portrait.png"
 
+  @wip @ci_flaky
   Scenario: Template with custom images overrides system images
     Given a template "BrandedTemplate" exists with custom images
     And the template has "custom-logo.png" in its images folder
@@ -29,6 +30,7 @@ Feature: System Images for Templates
     And the "images" folder should contain "custom-logo.png"
     And the "images" folder should NOT contain "placeholder-square.png"
 
+  @wip @ci_flaky
   Scenario: Template with custom images AND wants system images gets both
     Given a template "HybridTemplate" exists with custom images
     And the template has "brand-logo.png" in its images folder

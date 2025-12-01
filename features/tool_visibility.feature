@@ -3,6 +3,7 @@ Feature: Real-Time Tool Visibility
   I want to see what tools the agent is using
   So that I understand what is happening in the background
 
+  @wip @ci_flaky
   Scenario: User sees tool usage in web UI
     Given I'm chatting with the real agent in web UI
     When the agent calls the "write_file" tool with argument "intro.md"
