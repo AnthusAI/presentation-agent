@@ -27,23 +27,7 @@ def before_scenario(context, scenario):
     if 'integration' in scenario.tags:
         return
     
-    # Mock OLD Google Generative AI SDK to avoid real API calls during tests
-    # This prevents "Could not initialize any Gemini model" errors
-    context.genai_configure_patch = patch('google.generativeai.configure')
-    context.genai_model_patch = patch('google.generativeai.GenerativeModel')
-    
-    context.mock_configure = context.genai_configure_patch.start()
-    context.mock_model_cls = context.genai_model_patch.start()
-    
-    # Set up default mock behavior for old SDK
-    mock_instance = MagicMock()
-    mock_chat_session = MagicMock()
-    mock_chat_session.send_message.return_value.text = "Mock AI response"
-    mock_chat_session.history = []
-    mock_instance.start_chat.return_value = mock_chat_session
-    context.mock_model_cls.return_value = mock_instance
-    
-    # Mock NEW Google Generative AI SDK (google.genai) to avoid real API calls
+    # Mock Google Generative AI SDK (google.genai) to avoid real API calls
     context.new_genai_client_patch = patch('google.genai.Client')
     context.mock_new_client_cls = context.new_genai_client_patch.start()
     
@@ -79,10 +63,6 @@ def before_scenario(context, scenario):
 
 def after_scenario(context, scenario):
     # Clean up patches
-    if hasattr(context, 'genai_configure_patch'):
-        context.genai_configure_patch.stop()
-    if hasattr(context, 'genai_model_patch'):
-        context.genai_model_patch.stop()
     if hasattr(context, 'new_genai_client_patch'):
         context.new_genai_client_patch.stop()
     
