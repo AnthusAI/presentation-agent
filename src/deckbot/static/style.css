@@ -1727,7 +1727,7 @@ button.btn-secondary:hover {
 .create-new-card i {
   width: 48px;
   height: 48px;
-  margin-bottom: 20px;
+  margin-bottom: 32px;
   color: hsl(var(--muted-foreground));
 }
 
