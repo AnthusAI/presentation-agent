@@ -28,9 +28,10 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
+          # Install all dependencies including transitive ones
+          pip install google-genai google-api-core behave python-dotenv requests Pillow flask pyyaml
+          # Install the package itself in development mode with dev dependencies
           pip install -e ".[dev]"
-          # Ensure all dependencies are installed, including transitive ones
-          pip install --upgrade google-genai behave
       
       - name: Run BDD tests
         run: |
