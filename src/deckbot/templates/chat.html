@@ -5,8 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DeckBot</title>
     <link rel="stylesheet" href="/static/style.css?v={{ cache_bust }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <!-- Monaco Editor -->
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
 </head>
 <body>
     <!-- Top Menu Bar (Shadcn Style) -->
@@ -66,17 +70,36 @@
                     <button id="menu-view-preview" class="dropdown-item checkable active">
                         <i data-lucide="eye" style="width: 16px; height: 16px;"></i>
                         Preview
-                        <span class="kbd">⌘1</span>
+                        <span class="kbd">^1</span>
                     </button>
                     <button id="menu-view-layouts" class="dropdown-item checkable">
                         <i data-lucide="layout-template" style="width: 16px; height: 16px;"></i>
                         Layouts
-                        <span class="kbd">⌘2</span>
+                        <span class="kbd">^2</span>
+                    </button>
+                    <button id="menu-view-code" class="dropdown-item checkable">
+                        <i data-lucide="code" style="width: 16px; height: 16px;"></i>
+                        Code
+                        <span class="kbd">^3</span>
                     </button>
                 </div>
             </div>
         </div>
         <div class="menu-right">
+            <div class="view-toggle-selector">
+                <button id="toggle-btn-preview" class="view-toggle-btn active" title="Preview">
+                    <i data-lucide="eye"></i>
+                    <span class="btn-label">Preview</span>
+                </button>
+                <button id="toggle-btn-code" class="view-toggle-btn" title="Code">
+                    <i data-lucide="code"></i>
+                    <span class="btn-label">Code</span>
+                </button>
+                <button id="toggle-btn-layouts" class="view-toggle-btn" title="Layouts">
+                    <i data-lucide="layout-template"></i>
+                    <span class="btn-label">Layouts</span>
+                </button>
+            </div>
             <div class="theme-selector">
                 <button class="theme-btn" data-theme="light" title="Light Mode">
                     <i data-lucide="sun"></i>
@@ -282,7 +305,7 @@
         <div class="sidebar">
             <!-- Preview View -->
             <div id="view-preview" class="sidebar-view active">
-                <iframe id="preview-frame" src=""></iframe>
+                <iframe id="preview-frame" src="" allow="fullscreen" allowfullscreen></iframe>
             </div>
             
             <!-- Layouts View -->
@@ -292,6 +315,32 @@
                     <p class="layouts-hint">Select a layout to apply it to your slides</p>
                     <div id="layouts-accordion">
                         <!-- Layouts will be loaded here -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Code View -->
+            <div id="view-code" class="sidebar-view">
+                <div class="code-view-container">
+                    <div class="code-sidebar">
+                        <div class="code-sidebar-header">Files</div>
+                        <div id="file-tree" class="file-tree">
+                            <!-- File tree populated by JS -->
+                        </div>
+                    </div>
+                    <div class="code-resizer"></div>
+                    <div class="code-content">
+                        <div class="code-content-header">
+                            <span id="current-file-name">No file selected</span>
+                            <button id="save-file-btn" class="save-file-btn" style="display: none;">
+                                <i data-lucide="save" style="width: 16px; height: 16px;"></i>
+                                Save
+                            </button>
+                        </div>
+                        <div id="code-display" class="code-display">
+                            <div class="code-empty-state">Select a file to view its contents</div>
+                        </div>
+                        <div id="monaco-editor-container" style="display: none; height: 100%;"></div>
                     </div>
                 </div>
             </div>

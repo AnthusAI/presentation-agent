@@ -5,13 +5,18 @@ from google.genai import types
 from rich.console import Console
 from deckbot.nano_banana import NanoBananaClient
 from deckbot.tools import PresentationTools
+from deckbot.preferences import PreferencesManager
 
 class Agent:
     def __init__(self, presentation_context, root_dir=None):
         self.context = presentation_context
         self.api_key = os.getenv("GOOGLE_API_KEY")
         
+        # Initialize preferences
+        self.prefs = PreferencesManager()
+        
         # Check for deprecated GEMINI_API_KEY and warn user
+
         if not self.api_key and os.getenv("GEMINI_API_KEY"):
             print("Warning: GEMINI_API_KEY is set but deprecated. Please use GOOGLE_API_KEY instead.")
             print("  export GOOGLE_API_KEY=$GEMINI_API_KEY")
@@ -21,7 +26,7 @@ class Agent:
         # Initialize tools
         # Pass root_dir to NanoBananaClient
         self.nano_client = NanoBananaClient(presentation_context, root_dir=root_dir)
-        self.tools_handler = PresentationTools(presentation_context, self.nano_client, root_dir=root_dir)
+        self.tools_handler = PresentationTools(presentation_context, self.nano_client, root_dir=root_dir, api_key=self.api_key)
         
         # Wrap tools for visibility and patch handler
         def w(name, original_func):
@@ -52,7 +57,9 @@ class Agent:
             w("preview_template", self.tools_handler.preview_template),
             w("get_aspect_ratio", self.tools_handler.get_aspect_ratio),
             w("set_aspect_ratio", self.tools_handler.set_aspect_ratio),
-            w("go_to_slide", self.tools_handler.go_to_slide)
+            w("go_to_slide", self.tools_handler.go_to_slide),
+            w("inspect_slide", self.tools_handler.inspect_slide),
+            w("validate_deck", self.tools_handler.validate_deck)
         ]
 
         # Set up history file path
@@ -81,13 +88,28 @@ class Agent:
 
         if self.api_key:
             self.client = genai.Client(api_key=self.api_key)
+            
+            # Load models from preferences
+            primary_model = self.prefs.get('primary_model', 'gemini-3-pro-preview')
+            secondary_model = self.prefs.get('secondary_model', 'gemini-2.0-flash-exp')
+            self.secondary_model_name = secondary_model
+
+            # Log model configuration
+            print(f"Primary Model: {primary_model}")
+            print(f"Secondary Model: {secondary_model}")
+
             # Try models in order of preference
             self.model_names = [
+                primary_model,
+                secondary_model,
                 'gemini-2.0-flash-exp',
                 'gemini-exp-1206',
                 'gemini-1.5-pro',
                 'gemini-1.5-flash'
             ]
+            # Remove duplicates while preserving order
+            self.model_names = list(dict.fromkeys(self.model_names))
+            
             # Initial model init (will be refreshed on chat)
             self._init_model(self._build_system_prompt())
         else:
@@ -210,7 +232,7 @@ class Agent:
         # Get current presentation aspect ratio
         current_aspect_ratio = "4:3"  # default
         try:
-            aspect_ratio = self.tools_handler.get_aspect_ratio()
+            aspect_ratio = self.tools_handler.manager.get_presentation_aspect_ratio(self.context['name'])
             if aspect_ratio:
                 current_aspect_ratio = aspect_ratio
         except Exception:
@@ -229,6 +251,10 @@ You are "DeckBot", a helpful AI assistant for creating Marp (Markdown) presentat
 Name: {self.context['name']}
 Description: {self.context.get('description', '')}
 {template_instructions}
+
+## Context - Read this First!
+The following files are the CURRENT content of the presentation.
+You do NOT need to call 'read_file' for these files.
 {file_context}
 
 ## Your Role
@@ -240,18 +266,95 @@ Description: {self.context.get('description', '')}
 {final_design_section}
 {layouts_section}
 
+## Image Sizing & Styling with Marp
+
+**IMPORTANT**: Marp provides special directives for controlling image sizes. These directives are placed in the image's alt text (the brackets in `![...](...)`).
+
+### Sizing Syntax
+Use these directives in the alt text to control image dimensions:
+
+```markdown
+![w:200px](image.jpg)          # Width only
+![h:150px](image.jpg)          # Height only
+![w:300px h:200px](image.jpg)  # Both width and height
+![width:200px](image.jpg)      # Alternative syntax
+![height:150px](image.jpg)     # Alternative syntax
+```
+
+**Supported units**: `px`, `cm`, `mm`, `in`, `pt`, `pc`, `em`, `%`
+
+### Common Use Cases
+
+1. **Small inline icons or decorations**:
+   ```markdown
+   ![w:32px](icon.svg) This is an icon
+   ```
+
+2. **Constrained images in layouts**:
+   ```markdown
+   ![w:250px](portrait-photo.jpg)
+   ```
+
+3. **Specific aspect ratios**:
+   ```markdown
+   ![w:400px h:300px](screenshot.png)
+   ```
+
+### How CSS and Marp Directives Interact
+
+- **Layout CSS uses `max-width: 100%`** (not `width: 100%`) to allow Marp sizing directives to work
+- This means:
+  - Images will **never exceed** their container width
+  - But they **can be smaller** when you use Marp sizing directives
+  - Without sizing directives, images will naturally fit their container
+
+### Styling with CSS
+
+You can **combine** Marp sizing directives with CSS styling:
+
+```markdown
+![w:200px](image.jpg)
+```
+
+Then add CSS rules for borders, shadows, etc:
+
+```css
+img {{
+  border: 3px solid #333;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}}
+```
+
+**What works**:
+- Borders, shadows, filters, transforms, opacity, etc. (any non-sizing CSS)
+- Marp sizing directives control the dimensions
+- CSS controls the appearance
+
+**What doesn't work**:
+- CSS rules that set `width: 100%` will override Marp sizing (but layouts use `max-width: 100%` to avoid this)
+
+### Best Practices
+
+1. **Use Marp directives for sizing**: `![w:200px](...)` instead of relying on CSS
+2. **Use CSS for styling**: borders, shadows, colors, effects
+3. **Test your sizing**: If images aren't responding to size directives, check for conflicting CSS `width` or `height` rules
+4. **Be specific**: `![w:150px](...)` is clearer than hoping CSS will size it correctly
+
 ## Marp Documentation
 {marp_docs}
 
-## Current Presentation Settings
-- Aspect Ratio: {current_aspect_ratio}
-- Note: Do NOT repeatedly check 'get_aspect_ratio' unless you have a reason to believe it changed.
+        ## Current Presentation Settings
+        - Aspect Ratio: {current_aspect_ratio} (Provided by system - DO NOT call 'get_aspect_ratio' to check this)
+        - Note: Only use 'set_aspect_ratio' if the user explicitly asks to change it.
 
 ## Capabilities & Tools
 - Use 'list_files' to see what slides exist.
   - **Note**: `list_files` returns items in **reverse-chronological order** (newest first). The first file listed is the most recently created/modified.
   - Generated image batches are stored in the `drafts/` directory. Use `list_files('drafts')` to find previously generated images.
-- Use 'read_file' to read slide content (though full context is provided above).
+- Use 'read_file' ONLY for files NOT listed in the context above (e.g., logs, data files). 
+  - **DO NOT use 'read_file' for deck.marp.md or other markdown files provided in the 'Current Presentation Context'.** 
+  - Reading them again is redundant and wastes resources.
 - Use 'create_slide_with_layout' to create a SINGLE new slide using a layout template.
   - **IMPORTANT**: Use this tool when the user wants to create ONLY ONE new slide.
   - This triggers an interactive UI where the user selects from visual layout previews (similar to image generation).
@@ -260,8 +363,10 @@ Description: {self.context.get('description', '')}
 - Use 'replace_text' to safely edit part of a file (e.g., insert an image link, change a title) without rewriting the whole file.
   - **ALWAYS prefer 'replace_text' for small edits to existing files.**
   - **Use this for creating MULTIPLE slides** by adding them to deck.marp.md.
+  - **Note**: Automatically recompiles the presentation. You do not need to call 'compile_presentation' manually.
 - Use 'write_file' to create NEW files or completely OVERWRITE existing files.
   - **WARNING**: 'write_file' replaces the ENTIRE content of the file. If you use it on an existing file, you MUST provide the COMPLETE new content (including all existing slides), otherwise you will delete user data.
+  - **Note**: Automatically recompiles the presentation.
 - Use 'copy_file', 'move_file', 'delete_file', 'create_directory' to organize and manage files within the presentation.
 - Use 'generate_image' to create visuals. 
   - You can specify 'aspect_ratio' (e.g., "1:1", "16:9", "9:16", "4:3") and 'resolution' ("1K", "2K", "4K"). 
@@ -277,8 +382,16 @@ Description: {self.context.get('description', '')}
   - **IMPORTANT**: When you call this, the system will generate candidates and let the user pick. DO NOT write any files that reference the image until you receive a [SYSTEM] message confirming which image was selected.
 - Use 'get_aspect_ratio' and 'set_aspect_ratio' to manage presentation aspect ratio (e.g., "16:9", "4:3"). Changing this recompiles the deck.
 - Use 'compile_presentation' to BUILD and PREVIEW the actual slide deck (opens HTML). Use this when the user wants to "see the deck" or "preview".
+  - **IMPORTANT**: Do NOT call this after using 'write_file' or 'replace_text', as those tools automatically recompile. Only use this if you need to force a recompile or open a specific slide.
   - **IMPORTANT**: You can optionally pass a 'slide_number' (integer) to open the presentation directly at that slide. E.g., `compile_presentation(slide_number=5)`.
+  - **NOTE**: This tool does NOT automatically run visual inspection. If you want to verify the visual layout, you MUST call 'inspect_slide' afterwards.
 - Use 'go_to_slide' to navigate to a specific slide (e.g., `go_to_slide(slide_number=3)`) WITHOUT recompiling. Use this when the deck is already built and you just want to change the view.
+  - **NOTE**: This tool does NOT automatically run visual inspection. If you want to verify the visual layout, you MUST call 'inspect_slide' afterwards.
+- Use 'inspect_slide' to visually check a specific slide for errors.
+  - **USE THIS** after 'go_to_slide' or 'compile_presentation' if you suspect layout issues or want to verify a fix.
+  - It will return a detailed visual report and alert you to critical issues like content overflow.
+- Use 'validate_deck' to check the deck for syntax errors (CSS, frontmatter) without modifying it.
+  - Use this if the user reports formatting issues or if you want to verify your changes are valid.
 - Use 'export_pdf' to EXPORT the deck to PDF. This requires Chrome/Chromium installed on the system.
 - Use 'open_presentation_folder' to OPEN the source files for the user to edit.
 - Use 'get_presentation_summary' to get a text summary of the slide deck state (titles, images, text previews). Use this for YOUR understanding or to summarize progress in chat, but NOT to "show" the deck visually.
@@ -307,15 +420,17 @@ When the user asks for an image:
     def _on_tool_event(self, event, data):
         """Log tool usage to history."""
         if event == "tool_start":
-            # Log function call
-            tool_args = data.get("kwargs", {}).copy()
-            # Gemini expects args as dict. If positional args used, we might lose info.
-            # Assuming mostly kwargs for now.
+            # Log function call with normalized args
+            # Use normalized_args if available, otherwise fall back to kwargs
+            normalized_args = data.get("args", {})
+            if not normalized_args:
+                # Fallback for old format
+                normalized_args = data.get("kwargs", {}).copy()
             
             part = types.Part(
                 function_call=types.FunctionCall(
                     name=data["tool"],
-                    args=tool_args
+                    args=normalized_args
                 )
             )
             self._log_message("model", parts=[part])
@@ -358,6 +473,49 @@ When the user asks for an image:
                 # print(f"Failed to init {model_name}: {e}") # Debugging
                 continue
         print("Error: Could not initialize any Gemini model. Please check your API key and network connection.")
+
+    def _generate_with_fallback(self, contents):
+        """
+        Attempt generation with current model. 
+        If 429/Resource Exhausted occurs, switch to secondary model and retry.
+        """
+        try:
+            return self.client.models.generate_content(
+                model=self.model_name,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    tools=self.tools_list,
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                        disable=False
+                    )
+                )
+            )
+        except Exception as e:
+            # Check for Resource Exhausted error
+            error_str = str(e)
+            # print(f"DEBUG: Error string: {error_str}") # Debug
+            is_resource_exhausted = "429" in error_str or "RESOURCE_EXHAUSTED" in error_str
+            
+            if is_resource_exhausted:
+                # print(f"DEBUG: Resource exhausted. Current: {self.model_name}, Secondary: {self.secondary_model_name}")
+                # If we haven't switched yet and have a secondary model
+                if self.model_name != self.secondary_model_name and self.secondary_model_name:
+                    print(f"Resource exhausted on {self.model_name}. Switching to secondary model: {self.secondary_model_name}")
+                    self.model_name = self.secondary_model_name
+                    
+                    # Retry with new model
+                    return self.client.models.generate_content(
+                        model=self.model_name,
+                        contents=contents,
+                        config=types.GenerateContentConfig(
+                            tools=self.tools_list,
+                            automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                                disable=False
+                            )
+                        )
+                    )
+            # Re-raise if not handled
+            raise e
 
     def chat(self, user_input, status_spinner=None):
         if not self.model or not self.client:
@@ -426,17 +584,9 @@ When the user asks for an image:
             
             # Make the API call with automatic function calling
             try:
-                response = self.client.models.generate_content(
-                    model=self.model_name,
-                    contents=contents,
-                    config=types.GenerateContentConfig(
-                        tools=self.tools_list,
-                        automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                            disable=False
-                        )
-                    )
-                )
+                response = self._generate_with_fallback(contents)
             except KeyError as ke:
+
                 # If automatic function calling fails to find a tool
                 import traceback
                 traceback.print_exc()

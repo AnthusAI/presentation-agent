@@ -256,3 +256,13 @@ def step_impl(context, name):
     
     context.responses = []
     context.last_response = None
+
+@when('I delete the template "{name}"')
+def step_impl(context, name):
+    manager = PresentationManager(root_dir=context.temp_dir)
+    manager.delete_template(name)
+
+@then('the template "{name}" should not exist')
+def step_impl(context, name):
+    path = os.path.join(context.templates_dir, name)
+    assert not os.path.exists(path), f"Template directory {path} should not exist"

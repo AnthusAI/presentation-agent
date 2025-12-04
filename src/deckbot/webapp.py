@@ -55,6 +55,164 @@ def preview_presentation():
         html_content
     )
     
+    # Add script to override Marp's fullscreen behavior to work properly in iframe
+    control_script = """
+<script>
+(function() {
+    console.log('[Marp Override] Script loaded');
+    
+    // Check if we're in an iframe
+    const inIframe = window.parent !== window;
+    console.log('[Marp Override] In iframe:', inIframe);
+    
+    if (inIframe) {
+        // Get reference to parent's sidebar element
+        let parentSidebar = null;
+        try {
+            parentSidebar = window.parent.document.querySelector('.sidebar');
+            console.log('[Marp Override] Found parent sidebar:', !!parentSidebar);
+        } catch (e) {
+            console.log('[Marp Override] Cannot access parent document (CORS?):', e.message);
+        }
+        
+        // Override requestFullscreen methods IMMEDIATELY before Marp loads
+        const originalRequestFullscreen = HTMLElement.prototype.requestFullscreen;
+        const originalWebkitRequestFullscreen = HTMLElement.prototype.webkitRequestFullscreen;
+        const originalExitFullscreen = Document.prototype.exitFullscreen;
+        const originalWebkitExitFullscreen = Document.prototype.webkitExitFullscreen;
+        
+        // Override requestFullscreen to trigger on parent's sidebar
+        HTMLElement.prototype.requestFullscreen = function() {
+            console.log('[Marp Override] requestFullscreen() called on', this.tagName);
+            console.log('[Marp Override] parentSidebar:', parentSidebar);
+            console.log('[Marp Override] originalRequestFullscreen:', typeof originalRequestFullscreen);
+            
+            if (parentSidebar) {
+                // We can access parent - call fullscreen directly (maintains user gesture)
+                console.log('[Marp Override] Calling requestFullscreen on parent sidebar');
+                console.log('[Marp Override] parentSidebar.requestFullscreen:', typeof parentSidebar.requestFullscreen);
+                
+                try {
+                    // Check fullscreen capability
+                    console.log('[Marp Override] document.fullscreenEnabled:', window.parent.document.fullscreenEnabled);
+                    console.log('[Marp Override] Sidebar style.display:', window.parent.getComputedStyle(parentSidebar).display);
+                    console.log('[Marp Override] Sidebar offsetWidth:', parentSidebar.offsetWidth);
+                    console.log('[Marp Override] Sidebar offsetHeight:', parentSidebar.offsetHeight);
+                    
+                    const result = originalRequestFullscreen.call(parentSidebar);
+                    console.log('[Marp Override] Call result:', result);
+                    console.log('[Marp Override] Result is Promise:', result instanceof Promise);
+                    
+                    // Add multiple checks
+                    setTimeout(() => {
+                        console.log('[Marp Override] After 100ms - fullscreenElement:', window.parent.document.fullscreenElement);
+                    }, 100);
+                    
+                    setTimeout(() => {
+                        console.log('[Marp Override] After 1000ms - fullscreenElement:', window.parent.document.fullscreenElement);
+                    }, 1000);
+                    
+                    if (result && result.then) {
+                        result.then(() => {
+                            console.log('[Marp Override] ✓✓✓ Fullscreen PROMISE RESOLVED ✓✓✓');
+                        }).catch(err => {
+                            console.error('[Marp Override] ✗✗✗ Fullscreen PROMISE REJECTED ✗✗✗');
+                            console.error('[Marp Override] Error:', err);
+                        });
+                    }
+                    
+                    // Listen for fullscreenchange events
+                    const fsChangeHandler = () => {
+                        console.log('[Marp Override] fullscreenchange EVENT fired!');
+                        console.log('[Marp Override] fullscreenElement is now:', window.parent.document.fullscreenElement);
+                    };
+                    window.parent.document.addEventListener('fullscreenchange', fsChangeHandler, { once: true });
+                    window.parent.document.addEventListener('webkitfullscreenchange', fsChangeHandler, { once: true });
+                    
+                    return result;
+                } catch (err) {
+                    console.error('[Marp Override] Exception calling requestFullscreen:', err);
+                    return Promise.reject(err);
+                }
+            } else {
+                // Cannot access parent (CORS) - send message instead
+                console.log('[Marp Override] Sending message to parent');
+                window.parent.postMessage('marp:fullscreen', window.location.origin);
+                return Promise.resolve();
+            }
+        };
+        
+        if (originalWebkitRequestFullscreen) {
+            HTMLElement.prototype.webkitRequestFullscreen = function() {
+                console.log('[Marp Override] webkitRequestFullscreen() called on', this.tagName);
+                
+                if (parentSidebar && parentSidebar.webkitRequestFullscreen) {
+                    console.log('[Marp Override] Calling webkitRequestFullscreen on parent sidebar');
+                    parentSidebar.webkitRequestFullscreen();
+                } else {
+                    window.parent.postMessage('marp:fullscreen', window.location.origin);
+                }
+            };
+        }
+        
+        // Override exitFullscreen
+        Document.prototype.exitFullscreen = function() {
+            console.log('[Marp Override] exitFullscreen() called');
+            
+            try {
+                if (originalExitFullscreen) {
+                    return originalExitFullscreen.call(window.parent.document);
+                }
+            } catch (e) {
+                window.parent.postMessage('marp:fullscreen', window.location.origin);
+            }
+            return Promise.resolve();
+        };
+        
+        if (originalWebkitExitFullscreen) {
+            Document.prototype.webkitExitFullscreen = function() {
+                console.log('[Marp Override] webkitExitFullscreen() called');
+                try {
+                    if (window.parent.document.webkitExitFullscreen) {
+                        window.parent.document.webkitExitFullscreen();
+                    }
+                } catch (e) {
+                    window.parent.postMessage('marp:fullscreen', window.location.origin);
+                }
+            };
+        }
+        
+        console.log('[Marp Override] Fullscreen API overridden');
+    }
+    
+    // Intercept presenter mode button clicks
+    document.addEventListener('click', function(e) {
+        const target = e.target;
+        if (target && target.hasAttribute && target.hasAttribute('data-bespoke-marp-osc')) {
+            const action = target.getAttribute('data-bespoke-marp-osc');
+            console.log('[Marp Override] OSC button clicked:', action);
+            
+            if (action === 'presenter' && inIframe) {
+                console.log('[Marp Override] Preventing presenter mode, showing alert');
+                e.preventDefault();
+                e.stopPropagation();
+                alert('Presenter view is not available in DeckBot. Use fullscreen mode instead (F key or fullscreen button).');
+                return false;
+            }
+        }
+    }, true);
+    
+    console.log('[Marp Override] Setup complete');
+})();
+</script>
+"""
+    
+    # Insert script before closing body tag
+    if '</body>' in html_content:
+        html_content = html_content.replace('</body>', control_script + '</body>')
+    else:
+        html_content += control_script
+    
     return html_content
 
 @app.route('/api/presentation/images/<path:filename>')
@@ -176,6 +334,23 @@ def list_templates():
             template['slide_count'] = 0
     
     return jsonify(templates)
+
+@app.route('/api/templates/delete', methods=['POST'])
+def delete_template():
+    data = request.json
+    name = data.get('name')
+    
+    if not name:
+        return jsonify({"error": "Name is required"}), 400
+    
+    manager = PresentationManager()
+    try:
+        manager.delete_template(name)
+        return jsonify({"message": "Deleted", "name": name})
+    except FileNotFoundError:
+        return jsonify({"error": "Template not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/presentations/<name>/preview-slides')
 def get_presentation_preview_slides(name):
@@ -752,3 +927,234 @@ def export_pdf():
         return jsonify({"message": result})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/presentation/files', methods=['GET'])
+def get_presentation_files():
+    """Get the file tree structure for the current presentation."""
+    global current_service
+    if not current_service:
+        return jsonify({"error": "No presentation loaded"}), 400
+    
+    pres_dir = current_service.agent.presentation_dir
+    
+    def build_tree(path, base_path):
+        """Recursively build file tree structure."""
+        items = []
+        try:
+            entries = os.listdir(path)
+            # Collect entries with their modification times
+            entries_with_mtime = []
+            for entry in entries:
+                # Skip hidden files and cache directories
+                if entry.startswith('.'):
+                    continue
+                    
+                full_path = os.path.join(path, entry)
+                rel_path = os.path.relpath(full_path, base_path)
+                
+                try:
+                    mtime = os.path.getmtime(full_path)
+                    entries_with_mtime.append((entry, full_path, rel_path, mtime))
+                except OSError:
+                    # Skip if we can't get mtime
+                    continue
+            
+            # Sort by modification time (reverse chronological - most recent first)
+            entries_with_mtime.sort(key=lambda x: x[3], reverse=True)
+            
+            for entry, full_path, rel_path, mtime in entries_with_mtime:
+                from datetime import datetime
+                mtime_iso = datetime.fromtimestamp(mtime).isoformat()
+                
+                if os.path.isdir(full_path):
+                    children = build_tree(full_path, base_path)
+                    items.append({
+                        'name': entry,
+                        'path': rel_path,
+                        'type': 'folder',
+                        'mtime': mtime_iso,
+                        'children': children
+                    })
+                else:
+                    # Determine file type
+                    ext = os.path.splitext(entry)[1].lower()
+                    file_type = 'file'
+                    if ext in ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp']:
+                        file_type = 'image'
+                    elif ext in ['.md', '.markdown']:
+                        file_type = 'markdown'
+                    elif ext in ['.json']:
+                        file_type = 'json'
+                    elif ext in ['.html', '.css', '.js']:
+                        file_type = 'code'
+                    
+                    items.append({
+                        'name': entry,
+                        'path': rel_path,
+                        'type': file_type,
+                        'mtime': mtime_iso
+                    })
+        except Exception as e:
+            print(f"Error reading directory {path}: {e}")
+            
+        return items
+    
+    try:
+        tree = build_tree(pres_dir, pres_dir)
+        return jsonify({"files": tree})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/presentation/file-content', methods=['GET'])
+def get_file_content():
+    """Get the content of a specific file in the current presentation."""
+    global current_service
+    if not current_service:
+        return jsonify({"error": "No presentation loaded"}), 400
+    
+    file_path = request.args.get('path')
+    if not file_path:
+        return jsonify({"error": "Path parameter required"}), 400
+    
+    pres_dir = current_service.agent.presentation_dir
+    full_path = os.path.join(pres_dir, file_path)
+    
+    # Security check: ensure path is within presentation directory
+    if not os.path.abspath(full_path).startswith(os.path.abspath(pres_dir)):
+        return jsonify({"error": "Invalid path"}), 403
+    
+    if not os.path.exists(full_path):
+        return jsonify({"error": "File not found"}), 404
+    
+    if os.path.isdir(full_path):
+        return jsonify({"error": "Path is a directory"}), 400
+    
+    try:
+        # Determine if file is binary
+        ext = os.path.splitext(file_path)[1].lower()
+        is_image = ext in ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp']
+        
+        if is_image:
+            # For images, return a URL to serve the image
+            return jsonify({
+                "type": "image",
+                "url": f"/api/presentation/file-serve?path={file_path}"
+            })
+        else:
+            # For text files, read and return content
+            try:
+                with open(full_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # Determine language for syntax highlighting
+                language = 'text'
+                if ext == '.md' or ext == '.markdown':
+                    language = 'markdown'
+                elif ext == '.json':
+                    language = 'json'
+                elif ext == '.html':
+                    language = 'html'
+                elif ext == '.css':
+                    language = 'css'
+                elif ext == '.js':
+                    language = 'javascript'
+                elif ext == '.py':
+                    language = 'python'
+                elif ext == '.yaml' or ext == '.yml':
+                    language = 'yaml'
+                
+                return jsonify({
+                    "type": "text",
+                    "content": content,
+                    "language": language
+                })
+            except UnicodeDecodeError:
+                # If we can't decode as text, treat as binary
+                return jsonify({
+                    "type": "binary",
+                    "message": "Binary file (cannot display)"
+                })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/presentation/file-save', methods=['POST'])
+def save_file():
+    """Save content to a file in the current presentation and recompile."""
+    global current_service
+    if not current_service:
+        return jsonify({"error": "No presentation loaded"}), 400
+    
+    data = request.json
+    file_path = data.get('path')
+    content = data.get('content')
+    
+    if not file_path:
+        return jsonify({"error": "Path parameter required"}), 400
+    
+    if content is None:
+        return jsonify({"error": "Content parameter required"}), 400
+    
+    pres_dir = current_service.agent.presentation_dir
+    full_path = os.path.join(pres_dir, file_path)
+    
+    # Security check: ensure path is within presentation directory
+    if not os.path.abspath(full_path).startswith(os.path.abspath(pres_dir)):
+        return jsonify({"error": "Invalid path"}), 403
+    
+    if os.path.isdir(full_path):
+        return jsonify({"error": "Path is a directory"}), 400
+    
+    try:
+        # Write content to file
+        with open(full_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        # Trigger Marp compilation
+        import subprocess
+        compile_result = {"success": True, "message": ""}
+        try:
+            result = subprocess.run(
+                ["npx", "@marp-team/marp-cli", "deck.marp.md", "--allow-local-files"],
+                cwd=pres_dir,
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            compile_result["message"] = "File saved and presentation recompiled successfully"
+        except subprocess.CalledProcessError as e:
+            compile_result["success"] = False
+            compile_result["message"] = f"File saved but compilation failed: {e.stderr or str(e)}"
+        except Exception as e:
+            compile_result["success"] = False
+            compile_result["message"] = f"File saved but compilation failed: {str(e)}"
+        
+        return jsonify({
+            "success": True,
+            "message": "File saved successfully",
+            "compile": compile_result
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to save file: {str(e)}"}), 500
+
+@app.route('/api/presentation/file-serve', methods=['GET'])
+def serve_file():
+    """Serve a file from the current presentation directory."""
+    global current_service
+    if not current_service:
+        return "No presentation loaded", 404
+    
+    file_path = request.args.get('path')
+    if not file_path:
+        return "Path parameter required", 400
+    
+    pres_dir = current_service.agent.presentation_dir
+    full_path = os.path.join(pres_dir, file_path)
+    
+    # Security check
+    if not os.path.abspath(full_path).startswith(os.path.abspath(pres_dir)):
+        return "Invalid path", 403
+    
+    if not os.path.exists(full_path):
+        return "File not found", 404
+    
+    return send_file(full_path)

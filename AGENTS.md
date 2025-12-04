@@ -112,3 +112,8 @@ When implementing or testing image-related features:
 - `src/deckbot/agent.py`: Agent instructions for batch-aware behavior
 - `features/image_batch_tracking.feature`: BDD tests for batch system
 
+## Model Configuration & Fallback
+The agent supports configurable primary and secondary models via `.deckbot.yaml`.
+- **Primary Model**: Default is `gemini-3-pro-preview`.
+- **Secondary Model**: Default is `gemini-2.0-flash-exp`.
+- **Automatic Fallback**: If the primary model returns a `429 RESOURCE_EXHAUSTED` error, the agent automatically switches to the secondary model and retries the request transparently.

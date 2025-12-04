@@ -100,6 +100,17 @@ If DeckBot isn't what you're looking for, there is a crowded market of alternati
     ```
     Get your API key from [Google AI Studio](https://aistudio.google.com/apikey).
 
+4.  **Model Configuration (Optional):**
+    You can configure which Gemini models to use by creating a `.deckbot.yaml` file in the project root. This is useful if you want to save costs by using a cheaper model (like Flash) as your primary driver, or if you want to experiment with new experimental models.
+
+    ```yaml
+    # .deckbot.yaml
+    primary_model: gemini-3-pro-preview  # Default
+    secondary_model: gemini-2.0-flash-exp # Default
+    ```
+    
+    DeckBot will automatically fallback to the secondary model if the primary model hits a rate limit (429 Resource Exhausted).
+
 ## Usage
 
 ### Web UI (Recommended)

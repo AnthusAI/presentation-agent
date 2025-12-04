@@ -26,7 +26,8 @@ dependencies = [
     "requests",
     "Pillow",
     "flask",
-    "pyyaml"
+    "pyyaml",
+    "cssutils"
 ]
 
 [project.optional-dependencies]

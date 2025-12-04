@@ -42,3 +42,7 @@ Feature: Presentation Templates
     And the file "brand-test/images/logo.png" should exist
     And the file "brand-test/deck.marp.md" should contain "![logo](images/logo.png)"
 
+  Scenario: Delete a template
+    Given a basic template "OldTemplate" exists
+    When I delete the template "OldTemplate"
+    Then the template "OldTemplate" should not exist

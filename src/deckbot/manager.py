@@ -370,6 +370,8 @@ paginate: true
                     try:
                         with open(metadata_path, "r") as f:
                             metadata = json.load(f)
+                            # Ensure name matches directory name to avoid deletion issues
+                            metadata['name'] = name
                             presentations.append(metadata)
                     except json.JSONDecodeError:
                         continue
@@ -393,6 +395,16 @@ paginate: true
         path = os.path.join(self.root_dir, name)
         if not os.path.exists(path):
             raise FileNotFoundError(f"Presentation '{name}' not found.")
+        
+        import shutil
+        shutil.rmtree(path)
+        return True
+
+    def delete_template(self, name):
+        """Delete a template by name."""
+        path = os.path.join(self.templates_dir, name)
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Template '{name}' not found.")
         
         import shutil
         shutil.rmtree(path)

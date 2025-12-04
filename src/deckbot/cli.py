@@ -209,6 +209,49 @@ def open_folder():
 
 @cli.command()
 @click.argument('name')
+@click.option('--format', '-f', type=click.Choice(['pdf', 'html', 'pptx', 'png', 'jpeg']), default='pdf', help='Output format')
+def build(name, format):
+    """Compile presentation to static file"""
+    manager = PresentationManager()
+    presentation = manager.get_presentation(name)
+    
+    if not presentation:
+        console.print(f"[red]Presentation '{name}' not found.[/red]")
+        return
+
+    root_dir = manager.root_dir
+    presentation_dir = os.path.join(root_dir, name)
+    input_file = os.path.join(presentation_dir, "deck.marp.md")
+    
+    if not os.path.exists(input_file):
+         console.print(f"[red]Source file {input_file} not found.[/red]")
+         return
+
+    output_filename = f"deck.{format}"
+    if format == 'html':
+        output_filename = "deck.marp.html"
+    
+    output_file = os.path.join(presentation_dir, output_filename)
+    
+    console.print(f"[green]Building {format.upper()} for {name}...[/green]")
+    
+    # Command: npx @marp-team/marp-cli input_file -o output_file
+    cmd = ["npx", "@marp-team/marp-cli", input_file, "-o", output_file]
+    
+    # Add specific flags if needed
+    if format == 'pdf':
+        cmd.append("--allow-local-files") # often needed for images
+        
+    try:
+        subprocess.run(cmd, check=True)
+        console.print(f"[bold green]Success![/bold green] Output saved to: {output_file}")
+    except subprocess.CalledProcessError as e:
+        console.print(f"[red]Build failed: {e}[/red]")
+    except FileNotFoundError:
+        console.print("[red]Error: npx not found. Please ensure Node.js and npm are installed.[/red]")
+
+@cli.command()
+@click.argument('name')
 def preview(name):
     """Start Marp server to preview the presentation"""
     manager = PresentationManager()

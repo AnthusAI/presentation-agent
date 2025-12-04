@@ -2,20 +2,27 @@ import os
 import subprocess
 import shutil
 import re
+import inspect
+import uuid
 from functools import wraps
 from rich.console import Console
 from rich.prompt import IntPrompt
 from deckbot.nano_banana import NanoBananaClient
 from deckbot.manager import PresentationManager
+from deckbot.deck_validator import DeckValidator
+from deckbot.visual_qa import VisualQA
 
 console = Console()
 
 class PresentationTools:
-    def __init__(self, presentation_context, nano_client: NanoBananaClient, root_dir=None):
+    def __init__(self, presentation_context, nano_client: NanoBananaClient, root_dir=None, api_key: str = None):
         self.context = presentation_context
         self.nano_client = nano_client
         self.status_spinner = None # To be set by Agent/REPL
         self.waiting_for_user_input = False  # Flag to indicate we're waiting for external input
+        self.api_key = api_key
+        self.current_slide = 1
+        self.visual_qa = VisualQA(api_key)
         
         # Hook for notifying updates (e.g., presentation compiled)
         self.on_presentation_updated = None
@@ -37,6 +44,18 @@ class PresentationTools:
         
         self.presentation_dir = os.path.join(root, presentation_context['name'])
         self.manager = PresentationManager(root_dir=root)
+
+    def _try_auto_compile(self):
+        """Automatically recompile the presentation and return status string."""
+        try:
+            # We don't want to force a specific slide, just general update
+            result = self.compile_presentation()
+            if "successful" in result:
+                return "\n\nPresentation automatically compiled. The preview is updated."
+            else:
+                return f"\n\nWarning: Auto-compilation failed: {result}"
+        except Exception as e:
+            return f"\n\nWarning: Auto-compilation failed: {str(e)}"
 
     def add_tool_listener(self, listener):
         self.tool_listeners.append(listener)
@@ -61,18 +80,40 @@ class PresentationTools:
         """Wrapper that notifies before/after tool execution."""
         @wraps(func)
         def wrapped(*args, **kwargs):
+            # Normalize arguments: bind positional args to parameter names
+            sig = inspect.signature(func)
+            bound_args = sig.bind(*args, **kwargs)
+            bound_args.apply_defaults()
+            normalized_args = bound_args.arguments
+            
+            # Generate a unique call ID for this tool invocation
+            call_id = str(uuid.uuid4())
+            
             if self.on_tool_call:
-                # Mask args for some tools if needed, but generally fine
-                # Convert args to list for JSON serialization if needed
-                self.on_tool_call("tool_start", {"tool": tool_name, "args": args, "kwargs": kwargs})
+                # Include normalized args and call_id
+                self.on_tool_call("tool_start", {
+                    "tool": tool_name, 
+                    "args": normalized_args,
+                    "call_id": call_id
+                })
             try:
                 result = func(*args, **kwargs)
                 if self.on_tool_call:
-                    self.on_tool_call("tool_end", {"tool": tool_name, "result": str(result)})
+                    self.on_tool_call("tool_end", {
+                        "tool": tool_name, 
+                        "result": str(result),
+                        "args": normalized_args,
+                        "call_id": call_id
+                    })
                 return result
             except Exception as e:
                 if self.on_tool_call:
-                    self.on_tool_call("tool_error", {"tool": tool_name, "error": str(e)})
+                    self.on_tool_call("tool_error", {
+                        "tool": tool_name, 
+                        "error": str(e),
+                        "args": normalized_args,
+                        "call_id": call_id
+                    })
                 raise e # Re-raise to let Gemini handle it
         
         # wrapped.__name__ = tool_name # Handled by @wraps
@@ -185,19 +226,41 @@ class PresentationTools:
             return f"Error reading file: {str(e)}"
 
     def write_file(self, filename: str, content: str):
-        """Write content to a file in the presentation directory. WARNING: Overwrites entire file."""
+        """
+        Write content to a file in the presentation directory. WARNING: Overwrites entire file.
+        Automatically recompiles the presentation after writing.
+        """
         if not os.path.exists(self.presentation_dir):
             return "Presentation directory does not exist."
+
+        # Validate deck structure if updating deck.marp.md
+        summary = None
+        if filename == 'deck.marp.md':
+            validation = DeckValidator.validate_and_summarize(content)
+            if not validation['valid']:
+                return f"Error: Invalid deck structure. {validation['error']}"
+            summary = validation.get('summary')
+
         path = os.path.join(self.presentation_dir, filename)
         try:
             with open(path, 'w') as f:
                 f.write(content)
-            return f"Successfully wrote to {filename}"
+            
+            msg = f"Successfully wrote to {filename}"
+            if summary:
+                msg += "\n\n" + summary
+            
+            # Auto-compile
+            msg += self._try_auto_compile()
+            return msg
         except Exception as e:
             return f"Error writing file: {str(e)}"
 
     def replace_text(self, filename: str, old_text: str, new_text: str):
-        """Replace text in a file. Use this to edit existing files safely."""
+        """
+        Replace text in a file. Use this to edit existing files safely.
+        Automatically recompiles the presentation after replacing.
+        """
         if not os.path.exists(self.presentation_dir):
             return "Presentation directory does not exist."
         path = os.path.join(self.presentation_dir, filename)
@@ -214,11 +277,48 @@ class PresentationTools:
                 
             new_content = content.replace(old_text, new_text)
             
+            # Validate deck structure if updating deck.marp.md
+            summary = None
+            if filename == 'deck.marp.md':
+                validation = DeckValidator.validate_and_summarize(new_content)
+                if not validation['valid']:
+                    return f"Error: Invalid deck structure. {validation['error']}"
+                summary = validation.get('summary')
+
             with open(path, 'w') as f:
                 f.write(new_content)
-            return f"Successfully replaced text in {filename}"
+            
+            msg = f"Successfully replaced text in {filename}"
+            if summary:
+                msg += "\n\n" + summary
+            
+            # Auto-compile
+            msg += self._try_auto_compile()
+            return msg
         except Exception as e:
             return f"Error replacing text: {str(e)}"
+
+    def validate_deck(self):
+        """
+        Validates the current deck structure and CSS.
+        Returns a summary if valid, or an error message if invalid.
+        Use this to check for syntax errors without modifying the file.
+        """
+        path = os.path.join(self.presentation_dir, 'deck.marp.md')
+        if not os.path.exists(path):
+             return "Error: deck.marp.md not found."
+             
+        try:
+            with open(path, 'r') as f:
+                content = f.read()
+            
+            validation = DeckValidator.validate_and_summarize(content)
+            if not validation['valid']:
+                return f"Validation Error:\n{validation['error']}"
+            
+            return f"Validation Successful:\n{validation['summary']}"
+        except Exception as e:
+            return f"Error validating deck: {str(e)}"
 
     def copy_file(self, source: str, destination: str):
         """Copy a file within the presentation directory."""
@@ -235,7 +335,9 @@ class PresentationTools:
             
         try:
             shutil.copy2(src_path, dst_path)
-            return f"Successfully copied '{source}' to '{destination}'"
+            msg = f"Successfully copied '{source}' to '{destination}'"
+            msg += self._try_auto_compile()
+            return msg
         except Exception as e:
             return f"Error copying file: {str(e)}"
 
@@ -254,12 +356,17 @@ class PresentationTools:
             
         try:
             shutil.move(src_path, dst_path)
-            return f"Successfully moved '{source}' to '{destination}'"
+            msg = f"Successfully moved '{source}' to '{destination}'"
+            msg += self._try_auto_compile()
+            return msg
         except Exception as e:
             return f"Error moving file: {str(e)}"
 
     def delete_file(self, filename: str):
-        """Delete a file from the presentation directory."""
+        """
+        Delete a file from the presentation directory.
+        Automatically recompiles the presentation after deletion.
+        """
         path = os.path.abspath(os.path.join(self.presentation_dir, filename))
         
         if not path.startswith(os.path.abspath(self.presentation_dir)):
@@ -273,7 +380,9 @@ class PresentationTools:
                 shutil.rmtree(path)
             else:
                 os.remove(path)
-            return f"Successfully deleted '{filename}'"
+            msg = f"Successfully deleted '{filename}'"
+            msg += self._try_auto_compile()
+            return msg
         except Exception as e:
             return f"Error deleting file: {str(e)}"
 
@@ -294,7 +403,7 @@ class PresentationTools:
         """
         Generates an image using Nano Banana.
         
-        In CLI mode: Synchronously generates, displays, and waits for selection.
+        In CLI mode: Synchronously generates, displays, and waits for selection. Automatically recompiles after saving.
         In Web mode: Triggers async generation and returns immediately. The system will
                      call the agent again after user selects an image.
         """
@@ -345,13 +454,38 @@ class PresentationTools:
                 filename = f"image_{selection}.png"
                 saved_path = self.nano_client.save_selection(candidates, selection - 1, filename)
                 rel_path = os.path.relpath(saved_path, self.presentation_dir)
-                return f"Image generated and saved to {rel_path}. You can now reference it in the presentation."
+                msg = f"Image generated and saved to {rel_path}. You can now reference it in the presentation."
+                msg += self._try_auto_compile()
+                return msg
             else:
                 return "Image selection cancelled."
         finally:
             # Restart spinner if it was active
             if self.status_spinner:
                 self.status_spinner.start()
+
+    def inspect_slide(self, slide_number: int) -> str:
+        """Runs Visual QA on the specified slide and returns a formatted string if issues are found."""
+        try:
+            # Pass conversation history to VisualQA if available
+            history = []
+            if hasattr(self.context, 'history'):
+                history = self.context.get('history', [])
+            
+            has_issues, report = self.visual_qa.check_slide(self.presentation_dir, slide_number, history=history)
+            
+            if has_issues:
+                return f"\n\nCRITICAL VISUAL ISSUES FOUND:\n{report}\n\nSTOP AND THINK: You have detected a visual defect. Do not blindly retry the same fix. Analyze the CSS and layout. If you have already attempted a fix, STOP and ask the user for help."
+            
+            return f"\n\n{report}"
+        except Exception as e:
+            # Log but don't break the tool
+            print(f"Visual QA Error: {e}")
+        return ""
+
+    def _run_visual_qa(self, slide_number: int) -> str:
+        # Deprecated internal method, kept for backward compatibility if needed, but delegating to new public method
+        return self.inspect_slide(slide_number)
 
     def go_to_slide(self, slide_number: int = None):
         """
@@ -363,10 +497,15 @@ class PresentationTools:
         if slide_number is None:
              return "Error: slide_number is required. Please specify which slide to go to."
 
+        self.current_slide = slide_number
+
         # Check if HTML exists
         html_file = os.path.join(self.presentation_dir, "deck.marp.html")
         if not os.path.exists(html_file):
             return "Presentation has not been compiled yet. Use 'compile_presentation' first."
+        
+        # Run Visual QA
+        # qa_report = self.inspect_slide(slide_number)
             
         # Notify listeners (Web UI)
         if self.on_presentation_updated:
@@ -389,6 +528,11 @@ class PresentationTools:
     def compile_presentation(self, slide_number: int = None):
         """
         Compiles the presentation using Marp.
+        
+        IMPORTANT: Most file operations (write_file, replace_text, delete_file) automatically recompile.
+        Only call this tool if:
+        1. You need to force a recompile without changing files.
+        2. You want to open the preview at a specific slide (using slide_number).
         
         Args:
             slide_number: Optional slide number to open the presentation at (1-based index).
@@ -428,9 +572,12 @@ class PresentationTools:
                 return self.go_to_slide(slide_number)
             
             # Default compilation success path (no specific slide)
+            target_slide = self.current_slide
+            # qa_report = self.inspect_slide(target_slide)
+
             if self.on_presentation_updated:
                 self.on_presentation_updated({})
-                return "Compilation successful. Presentation updated in Web UI."
+                return f"Compilation successful. Presentation updated in Web UI."
 
             # Local open default
             if os.path.exists(html_file):
@@ -438,7 +585,7 @@ class PresentationTools:
                      subprocess.Popen(["open", html_file], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 elif os.name == 'nt':
                      os.startfile(html_file)
-            return "Compilation successful."
+            return f"Compilation successful."
         except Exception as e:
             return f"Error compiling: {str(e)}"
 
