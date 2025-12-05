@@ -11,7 +11,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const welcomeScreen = document.getElementById('welcome-screen');
     const presentationCreate = document.getElementById('presentation-create');
     const btnCancelCreate = document.getElementById('btn-cancel-create');
-    const viewToggleSelector = document.querySelector('.view-toggle-selector');
     
     // Menu items
     const menuNew = document.getElementById('menu-new');
@@ -44,18 +43,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const toggleBtnPreview = document.getElementById('toggle-btn-preview');
     const toggleBtnLayouts = document.getElementById('toggle-btn-layouts');
     const toggleBtnCode = document.getElementById('toggle-btn-code');
-    const toggleBtnStyle = document.getElementById('toggle-btn-style');
-
-    // Style view elements
-    const viewStyle = document.getElementById('view-style');
-    const menuViewStyle = document.getElementById('menu-view-style');
-    const styleInstructions = document.getElementById('style-instructions');
-    const styleImagePrompt = document.getElementById('style-image-prompt');
-    const styleRefUpload = document.getElementById('style-ref-upload');
-    const styleRefImagePreview = document.getElementById('style-ref-image-preview');
-    const styleRefImg = document.getElementById('style-ref-img');
-    const btnRemoveRefImage = document.getElementById('btn-remove-ref-image');
-    const btnSaveStyle = document.getElementById('btn-save-style');
     
     // Preferences elements
     const preferencesModal = document.getElementById('preferences-modal');
@@ -89,47 +76,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentColorTheme = "miami"; // Default
     let selectedImageIndex = null; // Track which image candidate is selected
     let currentBatchSlug = null; // Track current image generation batch
-    let uploadedImages = []; // Track uploaded images for messages
-
-    // ===== State Management (localStorage) =====
-    const AppState = {
-        get presentation() {
-            return localStorage.getItem('deckbot_current_presentation');
-        },
-        set presentation(name) {
-            if (name) {
-                try {
-                    localStorage.setItem('deckbot_current_presentation', name);
-                } catch (e) {
-                    if (e.name === 'QuotaExceededError') {
-                        console.error('localStorage full. Please clear browser data.');
-                        alert('Storage full. Please clear browser data and reload.');
-                    }
-                    throw e;
-                }
-            } else {
-                localStorage.removeItem('deckbot_current_presentation');
-            }
-        },
-        get slide() {
-            return parseInt(localStorage.getItem('deckbot_current_slide') || '1');
-        },
-        set slide(number) {
-            try {
-                localStorage.setItem('deckbot_current_slide', String(number));
-            } catch (e) {
-                if (e.name === 'QuotaExceededError') {
-                    console.error('localStorage full. Please clear browser data.');
-                    alert('Storage full. Please clear browser data and reload.');
-                }
-                throw e;
-            }
-        },
-        clear() {
-            localStorage.removeItem('deckbot_current_presentation');
-            localStorage.removeItem('deckbot_current_slide');
-        }
-    };
 
     // ===== Theme Management =====
     function setTheme(theme, saveToBackend = true) {
@@ -406,10 +352,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // ===== Welcome Screen Functions =====
     function showWelcomeScreen() {
         welcomeScreen.classList.remove('hidden');
-        // Hide view toggle selector when no presentation is loaded
-        if (viewToggleSelector) {
-            viewToggleSelector.classList.remove('visible');
-        }
         loadPresentationsGrid();
         loadTemplatesGrid();
         refreshIcons();
@@ -417,10 +359,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function hideWelcomeScreen() {
         welcomeScreen.classList.add('hidden');
-        // Show view toggle selector when presentation is loaded
-        if (viewToggleSelector) {
-            viewToggleSelector.classList.add('visible');
-        }
     }
     
     function loadPresentationsGrid() {
@@ -640,7 +578,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function loadSlidePreviewsForTemplate(name, container) {
-        console.log('loadSlidePreviewsForTemplate: Loading previews for template:', name);
         fetch(`/api/templates/${encodeURIComponent(name)}/preview-slides`)
             .then(r => r.json())
             .then(data => {
@@ -649,53 +586,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 
-                console.log('loadSlidePreviewsForTemplate: Received previews:', data.previews);
                 container.innerHTML = '';
                 if (data.previews && data.previews.length > 0) {
-                    // Append first slide
-                    const firstImg = document.createElement('img');
-                    firstImg.src = data.previews[0];
-                    firstImg.alt = 'Slide preview';
-                    container.appendChild(firstImg);
-                    console.log('loadSlidePreviewsForTemplate: Appended first slide');
-                    
-                    // Check for style.png and insert it as second image
-                    const styleImgUrl = `/api/templates/${encodeURIComponent(name)}/images/style.png`;
-                    console.log('loadSlidePreviewsForTemplate: Checking for style.png at:', styleImgUrl);
-                    
-                    const styleImg = document.createElement('img');
-                    styleImg.src = styleImgUrl;
-                    styleImg.alt = 'Style reference';
-                    styleImg.style.border = '2px solid hsl(var(--primary))';
-                    styleImg.style.borderRadius = '4px';
-                    styleImg.onerror = (e) => {
-                        console.error('loadSlidePreviewsForTemplate: Failed to load style.png:', e);
-                    };
-                    
-                    const testImg = new Image();
-                    testImg.onload = () => {
-                        console.log('loadSlidePreviewsForTemplate: style.png exists, inserting as second image');
-                        // Insert style.png right after the first slide
-                        container.appendChild(styleImg);
-                        // Then append remaining slides
-                        for (let i = 1; i < data.previews.length; i++) {
-                            const img = document.createElement('img');
-                            img.src = data.previews[i];
-                            img.alt = 'Slide preview';
-                            container.appendChild(img);
-                        }
-                    };
-                    testImg.onerror = (e) => {
-                        console.log('loadSlidePreviewsForTemplate: style.png does not exist or failed to load:', e);
-                        // style.png doesn't exist, just append remaining slides
-                        for (let i = 1; i < data.previews.length; i++) {
-                            const img = document.createElement('img');
-                            img.src = data.previews[i];
-                            img.alt = 'Slide preview';
-                            container.appendChild(img);
-                        }
-                    };
-                    testImg.src = styleImgUrl;
+                    data.previews.forEach(url => {
+                        const img = document.createElement('img');
+                        img.src = url;
+                        img.alt = 'Slide preview';
+                        container.appendChild(img);
+                    });
                 } else {
                     container.innerHTML = '<div class="slides-preview-loading">No slides</div>';
                 }
@@ -742,15 +640,22 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!confirm('Are you sure you want to close the current presentation?')) {
                 return;
             }
-
-            // Clear frontend state
-            AppState.clear();
-
-            // Reset UI state
-            currentPresName = "";
-            chatHistory.innerHTML = '';
-            previewFrame.src = '';
-            showWelcomeScreen();
+            
+            // Close via API
+            fetch('/api/state/current-presentation', {
+                method: 'DELETE'
+            })
+            .then(r => r.json())
+            .then(data => {
+                // Reset UI state
+                currentPresName = "";
+                chatHistory.innerHTML = '';
+                previewFrame.src = '';
+                showWelcomeScreen();
+            })
+            .catch(err => {
+                console.error('Error closing presentation:', err);
+            });
         });
     }
     
@@ -911,8 +816,6 @@ document.addEventListener('DOMContentLoaded', () => {
             toggleBtnLayouts.classList.add('active');
         } else if (viewName === 'code' && toggleBtnCode) {
             toggleBtnCode.classList.add('active');
-        } else if (viewName === 'style' && toggleBtnStyle) {
-            toggleBtnStyle.classList.add('active');
         }
         
         // Save preference
@@ -935,11 +838,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // If switching to preview view, reload the preview to show latest changes
         if (viewName === 'preview') {
             reloadPreview();
-        }
-
-        // If switching to style view, load style info
-        if (viewName === 'style') {
-            loadStyleView();
         }
     }
     
@@ -1050,126 +948,6 @@ document.addEventListener('DOMContentLoaded', () => {
             .catch(err => console.error('Error loading file tree:', err));
     }
     
-    // ===== Style View Functions =====
-    function loadStyleView() {
-        if (!currentPresName) {
-            console.log('loadStyleView: No currentPresName, skipping');
-            return;
-        }
-        
-        console.log('loadStyleView: Loading style info for', currentPresName);
-        
-        // Pass presentation name in query param for clarity, though session should handle it
-        fetch(`/api/presentation/style`)
-            .then(res => {
-                if (!res.ok) {
-                    console.error('loadStyleView: API response not OK:', res.status, res.statusText);
-                    return res.json().then(data => {
-                        throw new Error(data.error || `HTTP ${res.status}`);
-                    });
-                }
-                return res.json();
-            })
-            .then(data => {
-                console.log('loadStyleView: Received data:', data);
-                
-                if (data.error) {
-                    console.error('Error loading style info:', data.error);
-                    return;
-                }
-                
-                if (styleInstructions) {
-                    styleInstructions.value = data.instructions || '';
-                    console.log('loadStyleView: Set instructions to:', data.instructions || '(empty)');
-                } else {
-                    console.warn('loadStyleView: styleInstructions element not found');
-                }
-                
-                if (styleImagePrompt) {
-                    styleImagePrompt.value = (data.image_style && data.image_style.prompt) || '';
-                    console.log('loadStyleView: Set image prompt to:', (data.image_style && data.image_style.prompt) || '(empty)');
-                } else {
-                    console.warn('loadStyleView: styleImagePrompt element not found');
-                }
-                
-                // Handle reference image - use convention-based style.png
-                if (styleRefImagePreview && styleRefImg) {
-                    // Check if style.png exists (convention-based)
-                    const styleImagePath = 'images/style.png';
-                    const styleImageUrl = `/api/presentation/file-serve?path=${styleImagePath}`;
-                    
-                    // Try to load the image to see if it exists
-                    const testImg = new Image();
-                    testImg.onload = () => {
-                        console.log('loadStyleView: style.png exists, displaying it');
-                        styleRefImg.src = styleImageUrl;
-                        styleRefImagePreview.style.display = 'block';
-                    };
-                    testImg.onerror = () => {
-                        console.log('loadStyleView: style.png does not exist');
-                        styleRefImagePreview.style.display = 'none';
-                        styleRefImg.src = '';
-                    };
-                    testImg.src = styleImageUrl;
-                } else {
-                    console.warn('loadStyleView: styleRefImagePreview or styleRefImg elements not found');
-                }
-            })
-            .catch(err => {
-                console.error('Failed to load style info:', err);
-            });
-    }
-
-    function saveStyleSettings() {
-        if (!currentPresName) return;
-        
-        const formData = new FormData();
-        if (styleInstructions) formData.append('instructions', styleInstructions.value);
-        if (styleImagePrompt) formData.append('image_style.prompt', styleImagePrompt.value);
-        
-        if (styleRefUpload && styleRefUpload.files.length > 0) {
-            formData.append('file', styleRefUpload.files[0]);
-        }
-        
-        // Disable button while saving
-        if (btnSaveStyle) {
-            btnSaveStyle.disabled = true;
-            btnSaveStyle.textContent = 'Saving...';
-        }
-        
-        fetch('/api/presentation/style', {
-            method: 'POST',
-            body: formData // Fetch handles content-type for FormData
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (btnSaveStyle) {
-                btnSaveStyle.disabled = false;
-                btnSaveStyle.textContent = 'Save Changes';
-            }
-            
-            if (data.error) {
-                alert('Error saving settings: ' + data.error);
-                return;
-            }
-            
-            // Refresh view (especially for image preview)
-            loadStyleView();
-            
-            // Reset file input
-            if (styleRefUpload) styleRefUpload.value = '';
-            
-            console.log('Style settings saved');
-        })
-        .catch(err => {
-            if (btnSaveStyle) {
-                btnSaveStyle.disabled = false;
-                btnSaveStyle.textContent = 'Save Changes';
-            }
-            alert('Failed to save settings: ' + err);
-        });
-    }
-
     function renderFileTree(files) {
         if (!fileTree) return;
         
@@ -1534,31 +1312,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (toggleBtnCode) {
         toggleBtnCode.addEventListener('click', () => switchView('code'));
     }
-    if (toggleBtnStyle) {
-        toggleBtnStyle.addEventListener('click', () => switchView('style'));
-    }
-    if (menuViewStyle) {
-        menuViewStyle.addEventListener('click', () => switchView('style'));
-    }
-    if (btnSaveStyle) {
-        btnSaveStyle.addEventListener('click', saveStyleSettings);
-    }
-    if (btnRemoveRefImage) {
-        btnRemoveRefImage.addEventListener('click', (e) => {
-            e.preventDefault(); // Prevent any form submit
-            if (confirm('Remove style reference image?')) {
-                fetch('/api/presentation/style', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ delete_reference: true, presentation_name: currentPresName })
-                })
-                .then(res => res.json())
-                .then(data => {
-                     loadStyleView();
-                });
-            }
-        });
-    }
     
     // Always default to preview view
     // (Saved preferences are not used - preview is the default for better UX)
@@ -1673,48 +1426,9 @@ document.addEventListener('DOMContentLoaded', () => {
         let url = `/api/presentation/preview?t=${new Date().getTime()}`;
         if (slideNumber) {
             url += `#${slideNumber}`;
-            AppState.slide = slideNumber; // Store in localStorage
         }
         previewFrame.src = url;
     }
-
-    // Monitor iframe hash changes to track manual slide navigation
-    function monitorIframeSlideChanges() {
-        if (!previewFrame) return;
-
-        // Listen to iframe load events
-        previewFrame.addEventListener('load', () => {
-            try {
-                const iframeWindow = previewFrame.contentWindow;
-                if (iframeWindow) {
-                    // Monitor hash changes within the iframe
-                    let lastHash = iframeWindow.location.hash;
-                    const checkHash = () => {
-                        try {
-                            const currentHash = iframeWindow.location.hash;
-                            if (currentHash !== lastHash && currentHash) {
-                                lastHash = currentHash;
-                                // Extract slide number from hash (e.g., "#5" -> 5)
-                                const slideNum = parseInt(currentHash.substring(1));
-                                if (!isNaN(slideNum)) {
-                                    AppState.slide = slideNum;
-                                }
-                            }
-                        } catch (e) {
-                            // Cross-origin or access denied - expected in some cases
-                        }
-                        requestAnimationFrame(checkHash);
-                    };
-                    checkHash();
-                }
-            } catch (e) {
-                // Cross-origin access denied - expected behavior
-            }
-        });
-    }
-
-    // Start monitoring iframe navigation
-    monitorIframeSlideChanges();
 
     // ===== Template Loading =====
     function loadTemplates() {
@@ -2002,10 +1716,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function loadPresentation(name) {
-        // Store in frontend state
-        AppState.presentation = name;
-        AppState.slide = 1; // Reset to slide 1 on load
-
         fetch('/api/load', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -2430,25 +2140,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const text = messageInput.value.trim();
         if (!text && uploadedImages.length === 0) return;
 
-        // Get current state
-        const presentationName = AppState.presentation;
-        const currentSlide = AppState.slide;
-
-        if (!presentationName) {
-            alert('No presentation loaded');
-            return;
-        }
-
         // Upload images first if any
         if (uploadedImages.length > 0) {
             const formData = new FormData();
             formData.append('message', text || '');
-            formData.append('presentation_name', presentationName);
-            formData.append('current_slide', String(currentSlide));
             uploadedImages.forEach((file, index) => {
                 formData.append(`image_${index}`, file);
             });
-
+            
             fetch('/api/chat', {
                 method: 'POST',
                 body: formData
@@ -2470,11 +2169,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fetch('/api/chat', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    message: text,
-                    presentation_name: presentationName,
-                    current_slide: currentSlide
-                })
+                body: JSON.stringify({message: text})
             })
             .then(r => r.json())
             .then(data => {
@@ -2483,7 +2178,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
         }
-
+        
         // Clear input
         messageInput.value = '';
     }
@@ -2568,91 +2263,46 @@ document.addEventListener('DOMContentLoaded', () => {
     let reconnectAttempts = 0;
     let maxReconnectDelay = 30000; // 30 seconds max
     let reconnectTimeout = null;
-    let countdownInterval = null;
 
     function connectSSE() {
-        // Clear any existing timeout and countdown
+        // Clear any existing timeout
         if (reconnectTimeout) {
             clearTimeout(reconnectTimeout);
             reconnectTimeout = null;
         }
-        if (countdownInterval) {
-            clearInterval(countdownInterval);
-            countdownInterval = null;
-        }
 
         // Close existing connection if any
         if (evtSource) {
-            console.log('Closing existing EventSource, readyState:', evtSource.readyState);
             evtSource.close();
-            evtSource = null;
         }
 
-        console.log('Creating new EventSource connection to /events...');
+        console.log('Connecting to SSE...');
+        evtSource = new EventSource('/events');
 
-        try {
-            evtSource = new EventSource('/events');
+        evtSource.onopen = () => {
+            console.log('SSE connected');
+            reconnectAttempts = 0; // Reset on successful connection
+            hideConnectionStatus();
+        };
 
-            evtSource.onopen = () => {
-                console.log('SSE connection opened successfully');
-                reconnectAttempts = 0; // Reset on successful connection
-                hideConnectionStatus();
-            };
+        evtSource.onerror = (error) => {
+            console.error('SSE error:', error);
+            evtSource.close();
 
-            evtSource.onerror = (error) => {
-                console.error('SSE error event fired. ReadyState:', evtSource.readyState, 'Error:', error);
-
-                // Only schedule reconnection if we haven't already
-                if (reconnectTimeout) {
-                    console.log('Reconnection already scheduled, ignoring this error event');
-                    return;
-                }
-
-                if (evtSource) {
-                    evtSource.close();
-                }
-
-                // Calculate exponential backoff delay
-                const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), maxReconnectDelay);
-                reconnectAttempts++;
-
-                console.log(`Scheduling reconnection in ${delay}ms (attempt ${reconnectAttempts})...`);
-
-                // Start countdown
-                let remainingSeconds = Math.ceil(delay / 1000);
-                showConnectionStatus(`Connection lost. Reconnecting in ${remainingSeconds}s...`);
-
-                countdownInterval = setInterval(() => {
-                    remainingSeconds--;
-                    if (remainingSeconds > 0) {
-                        showConnectionStatus(`Connection lost. Reconnecting in ${remainingSeconds}s...`);
-                    } else {
-                        showConnectionStatus(`Connection lost. Reconnecting now...`);
-                    }
-                }, 1000);
-
-                reconnectTimeout = setTimeout(() => {
-                    if (countdownInterval) {
-                        clearInterval(countdownInterval);
-                        countdownInterval = null;
-                    }
-                    console.log('Attempting reconnection now...');
-                    connectSSE();
-                }, delay);
-            };
-
-            // Register all event listeners
-            registerSSEListeners(evtSource);
-
-        } catch (err) {
-            console.error('Failed to create EventSource:', err);
-            // Schedule retry even if constructor throws
+            // Calculate exponential backoff delay
             const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), maxReconnectDelay);
             reconnectAttempts++;
+
+            console.log(`Reconnecting in ${delay}ms (attempt ${reconnectAttempts})...`);
+            showConnectionStatus(`Connection lost. Reconnecting in ${Math.ceil(delay/1000)}s...`);
+
             reconnectTimeout = setTimeout(() => {
                 connectSSE();
             }, delay);
-        }
+        };
+
+        // Register all event listeners
+        registerSSEListeners(evtSource);
     }
 
     function showConnectionStatus(message) {
@@ -3065,58 +2715,249 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize SSE connection with reconnection support
     connectSSE();
+        const data = JSON.parse(e.data);
+        appendImageMessage(data.image_path, data.index, data.batch_slug);
+    });
+
+    evtSource.addEventListener("image_progress", (e) => {
+        const data = JSON.parse(e.data);
+        thinkingIndicator.classList.remove('hidden');
+        thinkingIndicator.querySelector('.text').textContent = data.status || `Generating image ${data.current}/${data.total}...`;
+    });
+
+    evtSource.addEventListener("images_ready", (e) => {
+        thinkingIndicator.classList.add('hidden');
+        thinkingIndicator.querySelector('.text').textContent = "Thinking...";
+    });
+    
+    evtSource.addEventListener("image_selected", (e) => {
+        const data = JSON.parse(e.data);
+        appendSystemMessage(`Image saved: ${data.filename}`);
+    });
+
+    evtSource.addEventListener("agent_request_details", (e) => {
+        const data = JSON.parse(e.data);
+        // Find the most recent user message and add details to it
+        const messages = chatHistory.querySelectorAll('.message.user');
+        if (messages.length > 0) {
+            const lastUserMessage = messages[messages.length - 1];
+            addDetailsToggleToMessage(lastUserMessage, data, 'agent');
+        }
+    });
+
+    evtSource.addEventListener("tool_start", (e) => {
+        const data = JSON.parse(e.data);
+        // appendSystemMessage(`🔧 Using tool: ${data.tool}`);
+        // Skipping start message to reduce noise, or maybe show a temporary status?
+        // For now let's just log it or show it.
+        console.log("Tool start:", data);
+    });
+
+    evtSource.addEventListener("tool_end", (e) => {
+        const data = JSON.parse(e.data);
+        let result = data.result || "";
+        
+        // Check for Visual QA delimiter
+        const visualQaDelimiter = "---VISUAL_QA_START---";
+        let visualQaReport = null;
+        
+        if (result.includes(visualQaDelimiter)) {
+            const parts = result.split(visualQaDelimiter);
+            result = parts[0]; // The main tool output
+            visualQaReport = parts[1]; // The Visual QA report
+        }
+        
+        // --- Handle Main Tool Output ---
+        
+        // Special handling for replace_text
+        if (data.tool === "replace_text" && data.args) {
+            appendToolUsageMessage(data.tool, data.args, result);
+        } else {
+            // Truncate long results, but make them expandable
+            let content = result;
+            let needsExpand = false;
+            
+            if (data.tool === "read_file") {
+                // Special compact mode for read_file
+                const summary = `File content loaded (${result.length} characters).`;
+                const safeResult = escapeHtml(result).replace(/\n/g, '<br>');
+                
+                const id = 'tool-res-' + Math.random().toString(36).substr(2, 9);
+                
+                content = `
+                    <div class="tool-result-summary text-muted">${escapeHtml(summary)}</div>
+                    <button class="text-link" onclick="document.getElementById('${id}').classList.toggle('hidden')">Show Full Output</button>
+                    <div id="${id}" class="tool-result-full hidden mt-2 p-2 bg-muted rounded text-xs font-mono whitespace-pre-wrap">${safeResult}</div>
+                `;
+                
+                needsExpand = true; // Treats content as HTML
+                
+            } else if (result.length > 200) {
+                // Create a summary
+                const summary = result.substring(0, 200) + "...";
+                // Create a details section
+                const safeResult = escapeHtml(result).replace(/\n/g, '<br>');
+                
+                const id = 'tool-res-' + Math.random().toString(36).substr(2, 9);
+                
+                content = `
+                    <div class="tool-result-summary">${escapeHtml(summary)}</div>
+                    <button class="text-link" onclick="document.getElementById('${id}').classList.toggle('hidden')">Show Full Output</button>
+                    <div id="${id}" class="tool-result-full hidden mt-2 p-2 bg-muted rounded text-xs font-mono whitespace-pre-wrap">${safeResult}</div>
+                `;
+                
+                needsExpand = true;
+            }
+            
+            // Format tool name and args as code block
+            const toolCallStr = data.args ? `${data.tool}: ${JSON.stringify(data.args)}` : data.tool;
+            appendSystemMessage(`Used tool: \`${toolCallStr}\``, content, needsExpand, true); // true = use tool icon
+        }
+        
+        // --- Handle Visual QA Report (Separate Message) ---
+        if (visualQaReport) {
+            // Parse important parts
+            let isCritical = visualQaReport.includes("CRITICAL VISUAL ISSUES FOUND");
+            let description = "";
+            let verdict = "";
+            
+            // Extract Description
+            const descMatch = visualQaReport.match(/DESCRIPTION:(.*?)(?:VERDICT:|$)/s);
+            if (descMatch) description = descMatch[1].trim();
+            
+            // Extract Verdict
+            const verdictMatch = visualQaReport.match(/VERDICT:(.*?)(?:STOP AND THINK:|$)/s);
+            if (verdictMatch) verdict = verdictMatch[1].trim();
+            
+            // Is it clean?
+            if (verdict.includes("No issues found")) {
+                // Maybe don't show prominent warning, just a checkmark?
+                // User said: "We want to see the explanation... and the flag... always see that"
+            }
+            
+            // Build HTML for Visual QA Message
+            // Header
+            let icon = isCritical ? '<i data-lucide="alert-triangle" class="text-red-500" style="width: 16px; height: 16px;"></i>' : '<i data-lucide="check-circle" class="text-green-500" style="width: 16px; height: 16px;"></i>';
+            let title = isCritical ? "Visual Inspection: Issues Detected" : "Visual Inspection: Passed";
+            
+            let reportHtml = `
+                <div class="visual-qa-report ${isCritical ? 'critical' : 'passed'}">
+                    <div class="qa-summary mb-2">
+                        ${description ? `<p class="mb-1"><strong>Observed:</strong> ${escapeHtml(description)}</p>` : ''}
+                        ${verdict ? `<p class="mb-1"><strong>Verdict:</strong> ${escapeHtml(verdict)}</p>` : ''}
+                    </div>
+            `;
+            
+            // Expandable Details (Full Report)
+            const qaId = 'qa-res-' + Math.random().toString(36).substr(2, 9);
+            
+            // Clean up the report for raw view - remove the redundant header that we already show in UI
+            let cleanReport = visualQaReport;
+            if (isCritical) {
+                cleanReport = cleanReport.replace(/CRITICAL VISUAL ISSUES FOUND:\s*/, '');
+            }
+            cleanReport = cleanReport.trim();
+            
+            const safeReport = escapeHtml(cleanReport).replace(/\n/g, '<br>');
+            
+            reportHtml += `
+                    <button class="text-link text-xs" onclick="document.getElementById('${qaId}').classList.toggle('hidden')">View Full Report</button>
+                    <div id="${qaId}" class="tool-result-full hidden mt-2 p-2 bg-muted rounded text-xs font-mono whitespace-pre-wrap">${safeReport}</div>
+                </div>
+            `;
+            
+            // Append as a separate system message with special styling
+            // We use a custom function or just appendSystemMessage with HTML
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message system visual-qa-message';
+            if (isCritical) messageDiv.classList.add('border-l-4', 'border-red-500', 'bg-red-50/10', 'pl-3');
+            
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.innerHTML = '<i data-lucide="eye" style="width: 16px; height: 16px;"></i>';
+            
+            const messageContent = document.createElement('div');
+            messageContent.className = 'message-content';
+            
+            const titleDiv = document.createElement('div');
+            titleDiv.className = `font-medium mb-1 flex items-center gap-2 ${isCritical ? 'text-red-500' : 'text-green-500'}`;
+            titleDiv.innerHTML = `${icon} ${title}`;
+            messageContent.appendChild(titleDiv);
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.innerHTML = reportHtml;
+            messageContent.appendChild(contentDiv);
+            
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(messageContent);
+            
+            chatHistory.appendChild(messageDiv);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+            refreshIcons();
+        }
+    });
+
+    evtSource.addEventListener("tool_error", (e) => {
+        const data = JSON.parse(e.data);
+        appendSystemMessage(`✗ Tool ${data.tool} error: ${data.error}`);
+    });
+
+    evtSource.addEventListener("layout_request", (e) => {
+        const data = JSON.parse(e.data);
+        showLayoutSelectionDialog(data.layouts, data.title, data.position);
+    });
+
+    evtSource.addEventListener("presentation_updated", (e) => {
+        console.log("Presentation updated, reloading preview...");
+        
+        // Automatically switch to preview view when presentation is updated
+        switchView('preview');
+        
+        // Check if event data contains slide number
+        let slideNumber = null;
+        try {
+            if (e.data) {
+                const data = JSON.parse(e.data);
+                if (data && data.slide_number) {
+                    slideNumber = data.slide_number;
+                }
+            }
+        } catch (err) {
+            console.warn("Error parsing presentation_updated data", err);
+        }
+        
+        reloadPreview(slideNumber);
+    });
 
     // ===== Initial Load =====
-
-    // Check localStorage for persisted state (new behavior)
-    const savedPresentation = AppState.presentation;
-    const savedSlide = AppState.slide;
-
-    if (savedPresentation) {
-        console.log('Restoring session from localStorage:', savedPresentation);
-        loadPresentation(savedPresentation);
-
-        // Navigate to saved slide after load completes
-        setTimeout(() => {
-            if (savedSlide > 1) {
-                reloadPreview(savedSlide);
-            }
-        }, 1000);
-
-        // Ensure welcome screen is hidden
-        hideWelcomeScreen();
-        if (presentationCreate) {
-            presentationCreate.classList.add('hidden');
-        }
-    } else {
-        // No localStorage state, check backend for backward compatibility
-        fetch('/api/state/current-presentation')
-            .then(r => r.json())
-            .then(state => {
-                if (state.name) {
-                    // Auto-restore presentation from backend
-                    console.log('Restoring session from backend:', state.name);
-                    loadPresentation(state.name);
-
-                    // Ensure welcome screen is hidden
-                    hideWelcomeScreen();
-                    if (presentationCreate) {
-                        presentationCreate.classList.add('hidden');
-                    }
-                } else {
-                    // No state, show welcome screen
-                    showWelcomeScreen();
-                    if (presentationCreate) {
-                        presentationCreate.classList.add('hidden');
-                    }
+    
+    // Check for persisted state first
+    fetch('/api/state/current-presentation')
+        .then(r => r.json())
+        .then(state => {
+            if (state.name) {
+                // Auto-restore presentation
+                console.log('Restoring session for:', state.name);
+                loadPresentation(state.name);
+                
+                // Ensure welcome screen is hidden
+                hideWelcomeScreen();
+                if (presentationCreate) {
+                    presentationCreate.classList.add('hidden');
                 }
-            })
-            .catch(err => {
-                console.error('Error checking backend state:', err);
-                // Fallback to welcome screen
+            } else {
+                // No state, show welcome screen
                 showWelcomeScreen();
-            });
-    }
+                if (presentationCreate) {
+                    presentationCreate.classList.add('hidden');
+                }
+            }
+        })
+        .catch(err => {
+            console.error('Error checking state:', err);
+            // Fallback to welcome screen
+            showWelcomeScreen();
+        });
     
     // Initialize icons
     refreshIcons();

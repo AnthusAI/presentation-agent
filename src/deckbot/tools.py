@@ -5,6 +5,7 @@ import re
 import inspect
 import uuid
 from functools import wraps
+from typing import Optional
 from rich.console import Console
 from rich.prompt import IntPrompt
 from deckbot.nano_banana import NanoBananaClient
@@ -15,7 +16,7 @@ from deckbot.visual_qa import VisualQA
 console = Console()
 
 class PresentationTools:
-    def __init__(self, presentation_context, nano_client: NanoBananaClient, root_dir=None, api_key: str = None):
+    def __init__(self, presentation_context, nano_client: NanoBananaClient, root_dir=None, api_key: Optional[str] = None):
         self.context = presentation_context
         self.nano_client = nano_client
         self.status_spinner = None # To be set by Agent/REPL
@@ -143,7 +144,7 @@ class PresentationTools:
             result.append(f"- {t['name']}: {t['description']}")
         return "\n".join(result)
 
-    def create_presentation(self, name: str, description: str = "", template: str = None):
+    def create_presentation(self, name: str, description: str = "", template: Optional[str] = None):
         """Creates a new presentation."""
         try:
             self.manager.create_presentation(name, description, template=template)
@@ -399,7 +400,7 @@ class PresentationTools:
         except Exception as e:
             return f"Error creating directory: {str(e)}"
 
-    def generate_image(self, prompt: str, aspect_ratio: str = None, resolution: str = "2K"):
+    def generate_image(self, prompt: str, aspect_ratio: Optional[str] = None, resolution: str = "2K"):
         """
         Generates an image using Nano Banana.
         
@@ -467,6 +468,19 @@ class PresentationTools:
     def inspect_slide(self, slide_number: int) -> str:
         """Runs Visual QA on the specified slide and returns a formatted string if issues are found."""
         try:
+            # Ensure preview image exists
+            preview_path, was_generated = self.visual_qa._ensure_preview(self.presentation_dir, slide_number)
+            
+            # Emit tool image event if preview exists
+            if preview_path and self.on_tool_call:
+                # Convert to relative path for serving
+                rel_path = os.path.relpath(preview_path, self.presentation_dir)
+                self.on_tool_call("tool_image", {
+                    "image_path": rel_path,
+                    "tool": "inspect_slide",
+                    "slide_number": slide_number
+                })
+            
             # Pass conversation history to VisualQA if available
             history = []
             if hasattr(self.context, 'history'):
@@ -487,7 +501,142 @@ class PresentationTools:
         # Deprecated internal method, kept for backward compatibility if needed, but delegating to new public method
         return self.inspect_slide(slide_number)
 
-    def go_to_slide(self, slide_number: int = None):
+    def remix_slide(self, slide_number: Optional[int] = None, remix_prompt: Optional[str] = None, aspect_ratio: Optional[str] = None, resolution: str = "2K"):
+        """
+        Remix a slide by rendering it to an image and generating a remixed version.
+        
+        Args:
+            slide_number: The slide number to remix (1-based). If None, uses current_slide.
+            remix_prompt: The prompt describing how to remix the slide
+            aspect_ratio: Optional aspect ratio for the remixed image (defaults to presentation aspect ratio)
+            resolution: Image resolution ("1K", "2K", "4K")
+        """
+        # Use current slide if not specified
+        if slide_number is None:
+            slide_number = self.current_slide
+        
+        if not remix_prompt:
+            return "Error: remix_prompt is required. Please provide a description of how to remix the slide."
+        
+        try:
+            # Render slide to image using same logic as inspect_slide
+            preview_path, was_generated = self.visual_qa._ensure_preview(self.presentation_dir, slide_number)
+            
+            if not preview_path or not os.path.exists(preview_path):
+                return f"Error: Could not generate preview image for slide {slide_number}."
+            
+            # Load the rendered slide image
+            import PIL.Image
+            remix_reference_image = PIL.Image.open(preview_path)
+            
+            # Get aspect ratio from presentation if not provided
+            if not aspect_ratio:
+                aspect_ratio = self.manager.get_presentation_aspect_ratio(self.context['name'])
+            
+            # Trigger image generation with remix reference
+            # This will use the web mode image generation flow
+            if self.on_image_generation:
+                # Web mode: trigger the image generation handler with slide number metadata
+                self.on_image_generation(remix_prompt, aspect_ratio=aspect_ratio, resolution=resolution, remix_reference_image=remix_reference_image, remix_slide_number=slide_number)
+                return f"Remixing slide {slide_number} according to: {remix_prompt}. Generating candidates..."
+            else:
+                # CLI mode: call directly with metadata
+                result = self.nano_client.generate_candidates(
+                    remix_prompt,
+                    aspect_ratio=aspect_ratio,
+                    resolution=resolution,
+                    remix_reference_image=remix_reference_image,
+                    batch_metadata={"remix_slide_number": slide_number}
+                )
+                candidates = result['candidates']
+                batch_slug = result['batch_slug']
+                
+                if not candidates:
+                    return "Failed to generate remixed images."
+                
+                console.print("[bold]Generated Remix Candidates:[/bold]")
+                for i, path in enumerate(candidates):
+                    console.print(f"{i+1}. {path}")
+                
+                selection = IntPrompt.ask("Select an image (1-4) or 0 to cancel", choices=["0", "1", "2", "3", "4"])
+                
+                if selection > 0:
+                    filename = f"remix_slide_{slide_number}_{selection}.png"
+                    saved_path = self.nano_client.save_selection(candidates, selection - 1, filename)
+                    rel_path = os.path.relpath(saved_path, self.presentation_dir)
+                    msg = f"Remixed slide {slide_number} and saved to {rel_path}. REPLACE the entire contents of slide {slide_number} with this image by overlaying it. The image should cover the entire slide."
+                    msg += self._try_auto_compile()
+                    return msg
+                else:
+                    return "Remix selection cancelled."
+        except Exception as e:
+            return f"Error remixing slide: {str(e)}"
+    
+    def remix_image(self, image_path: str, remix_prompt: str, aspect_ratio: Optional[str] = None, resolution: str = "2K"):
+        """
+        Remix an existing image by generating a remixed version.
+        
+        Args:
+            image_path: Path to the image to remix (relative to presentation directory)
+            remix_prompt: The prompt describing how to remix the image
+            aspect_ratio: Optional aspect ratio for the remixed image (defaults to presentation aspect ratio)
+            resolution: Image resolution ("1K", "2K", "4K")
+        """
+        try:
+            # Resolve image path
+            full_path = os.path.join(self.presentation_dir, image_path)
+            if not os.path.exists(full_path):
+                return f"Error: Image not found at {image_path}."
+            
+            # Load the image
+            import PIL.Image
+            remix_reference_image = PIL.Image.open(full_path)
+            
+            # Get aspect ratio from presentation if not provided
+            if not aspect_ratio:
+                aspect_ratio = self.manager.get_presentation_aspect_ratio(self.context['name'])
+            
+            # Trigger image generation with remix reference
+            # This will use the web mode image generation flow
+            if self.on_image_generation:
+                # Web mode: trigger the image generation handler with original image path metadata
+                self.on_image_generation(remix_prompt, aspect_ratio=aspect_ratio, resolution=resolution, remix_reference_image=remix_reference_image, remix_image_path=image_path)
+                return f"Remixing image {image_path} according to: {remix_prompt}. Generating candidates..."
+            else:
+                # CLI mode: call directly with metadata
+                result = self.nano_client.generate_candidates(
+                    remix_prompt,
+                    aspect_ratio=aspect_ratio,
+                    resolution=resolution,
+                    remix_reference_image=remix_reference_image,
+                    batch_metadata={"remix_image_path": image_path}
+                )
+                candidates = result['candidates']
+                batch_slug = result['batch_slug']
+                
+                if not candidates:
+                    return "Failed to generate remixed images."
+                
+                console.print("[bold]Generated Remix Candidates:[/bold]")
+                for i, path in enumerate(candidates):
+                    console.print(f"{i+1}. {path}")
+                
+                selection = IntPrompt.ask("Select an image (1-4) or 0 to cancel", choices=["0", "1", "2", "3", "4"])
+                
+                if selection > 0:
+                    base_name = os.path.splitext(os.path.basename(image_path))[0]
+                    filename = f"remix_{base_name}_{selection}.png"
+                    saved_path = self.nano_client.save_selection(candidates, selection - 1, filename)
+                    rel_path = os.path.relpath(saved_path, self.presentation_dir)
+                    msg = f"Remixed image {image_path} and saved to {rel_path}. REPLACE the original image at `{image_path}` with this new remixed image. Update all references to use `{rel_path}` instead of `{image_path}`."
+                    msg += self._try_auto_compile()
+                    return msg
+                else:
+                    return "Remix selection cancelled."
+        except Exception as e:
+            return f"Error remixing image: {str(e)}"
+
+    def go_to_slide(self, slide_number: Optional[int] = None):
         """
         Navigates to a specific slide without recompiling.
         
@@ -525,7 +674,7 @@ class PresentationTools:
         
         return f"Navigating to slide {slide_number}."
 
-    def compile_presentation(self, slide_number: int = None):
+    def compile_presentation(self, slide_number: Optional[int] = None):
         """
         Compiles the presentation using Marp.
         
@@ -769,7 +918,7 @@ class PresentationTools:
         except Exception as e:
             return f"Error reading layouts: {str(e)}"
     
-    def create_slide_with_layout(self, title: str = None, position: str = "end"):
+    def create_slide_with_layout(self, title: Optional[str] = None, position: str = "end"):
         """
         Create a new slide using a layout template.
         

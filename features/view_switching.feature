@@ -74,3 +74,6 @@ Feature: Automatic View Switching
     Then the sidebar should show Preview view by default
     And no layouts should be visible
 
+
+
+

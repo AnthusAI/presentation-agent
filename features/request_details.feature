@@ -38,3 +38,6 @@ Feature: Request Details Display
     Then each message should have its own details toggle
     And expanding one should not affect others
 
+
+
+

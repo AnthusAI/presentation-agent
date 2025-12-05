@@ -278,3 +278,6 @@ Technical details:
 - Updated SessionService to accept aspect_ratio and resolution parameters ([`f41eb44`](https://github.com/AnthusAI/DeckBot/commit/f41eb445a1b8004ab8eafe6258c5abb517e5618b))
 
 * Initial commit ([`b5309ae`](https://github.com/AnthusAI/DeckBot/commit/b5309ae392e7d8dad88bd42fedee4f2e65d7a443))
+
+
+

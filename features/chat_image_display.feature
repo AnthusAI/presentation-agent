@@ -48,3 +48,6 @@ Feature: Chat-Based Image Display
     And I should be able to scroll through all content
     And the latest image should be at the bottom
 
+
+
+

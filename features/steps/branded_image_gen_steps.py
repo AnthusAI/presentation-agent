@@ -7,6 +7,7 @@ import json
 
 @given('a presentation "{name}" exists')
 def step_impl(context, name):
+    context.pres_name = name
     manager = PresentationManager(root_dir=context.temp_dir)
     try:
         manager.create_presentation(name)

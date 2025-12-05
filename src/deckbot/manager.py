@@ -2,6 +2,7 @@ import os
 import json
 import time
 import re
+import yaml
 from datetime import datetime
 
 class PresentationManager:
@@ -54,7 +55,7 @@ class PresentationManager:
             import shutil
             shutil.copytree(template_path, presentation_dir)
             
-            # Update metadata
+            # Update metadata - preserve ALL template fields
             metadata_path = os.path.join(presentation_dir, "metadata.json")
             metadata = {}
             if os.path.exists(metadata_path):
@@ -65,6 +66,14 @@ class PresentationManager:
             if "aspect_ratio" in metadata:
                 aspect_ratio = metadata["aspect_ratio"]
             
+            # Preserve important template fields before updating
+            preserved_instructions = metadata.get("instructions", "")
+            preserved_image_style = metadata.get("image_style", {})
+            preserved_typography = metadata.get("typography", {})
+            preserved_colors = metadata.get("colors", {})
+            preserved_design_opinions = metadata.get("design_opinions", {})
+            
+            # Update only specific fields, preserving all others
             metadata.update({
                 "name": name,
                 "description": description,
@@ -73,16 +82,59 @@ class PresentationManager:
                 "updated_at": datetime.now().isoformat()
             })
             
+            # Explicitly restore preserved fields (defensive programming)
+            if preserved_instructions:
+                metadata["instructions"] = preserved_instructions
+            if preserved_image_style:
+                metadata["image_style"] = preserved_image_style
+            if preserved_typography:
+                metadata["typography"] = preserved_typography
+            if preserved_colors:
+                metadata["colors"] = preserved_colors
+            if preserved_design_opinions:
+                metadata["design_opinions"] = preserved_design_opinions
+            
             with open(metadata_path, "w") as f:
                 json.dump(metadata, f, indent=2)
             
+            # Explicitly ensure template-specific images are copied (style.png, background.png, etc.)
+            # copytree should have copied them, but we verify and copy if missing (defensive)
+            template_images_dir = os.path.join(template_path, "images")
+            presentation_images_dir = os.path.join(presentation_dir, "images")
+            os.makedirs(presentation_images_dir, exist_ok=True)
+            
+            # Copy style.png if it exists (convention-based style reference)
+            # Always copy to ensure it's present (copytree should have copied it, but be defensive)
+            template_style_png = os.path.join(template_images_dir, "style.png")
+            presentation_style_png = os.path.join(presentation_images_dir, "style.png")
+            if os.path.exists(template_style_png):
+                shutil.copy2(template_style_png, presentation_style_png)
+            
+            # Copy background.png if it exists (for slide backgrounds)
+            # Always copy to ensure it's present (copytree should have copied it, but be defensive)
+            template_background_png = os.path.join(template_images_dir, "background.png")
+            presentation_background_png = os.path.join(presentation_images_dir, "background.png")
+            if os.path.exists(template_background_png):
+                shutil.copy2(template_background_png, presentation_background_png)
+            
             # Copy default layouts if template doesn't have layouts.md
+            # NOTE: We should NOT modify the deck file if the template already has a complete deck
+            # The template's deck.marp.md should be used as-is
             layouts_path = os.path.join(presentation_dir, "layouts.md")
             if not os.path.exists(layouts_path):
-                self._copy_default_layouts(presentation_dir)
+                # Only copy default layouts if template doesn't have its own layouts
+                # But DON'T merge CSS into the deck - the template's deck is already complete
+                default_layouts_path = os.path.join(self.templates_dir, "default-layouts.md")
+                if not os.path.exists(default_layouts_path):
+                    local_templates = os.path.abspath("templates")
+                    default_layouts_path = os.path.join(local_templates, "default-layouts.md")
+                if os.path.exists(default_layouts_path):
+                    dest_path = os.path.join(presentation_dir, "layouts.md")
+                    shutil.copy2(default_layouts_path, dest_path)
+                    # DO NOT merge CSS - template deck is already complete
             else:
-                # Template has layouts, merge its CSS into deck
-                self._merge_layouts_css(presentation_dir, layouts_path)
+                # Template has layouts, but don't merge - template deck is already complete
+                pass
             
             # Copy system images based on template metadata
             include_system_images = metadata.get('include_system_images', None)
@@ -308,10 +360,22 @@ paginate: true
                     break
             
             if has_style:
-                # TODO: Merge with existing styles (for now, skip if styles exist)
-                # This would require more complex logic to merge CSS blocks
-                print("Deck already has styles - skipping CSS merge")
-                return
+                # Merge layouts CSS with existing styles
+                # Find the end of the existing style block
+                style_end_idx = front_matter_end
+                for i in range(style_line_idx + 1, front_matter_end):
+                    # Check if this line starts a new top-level key (not indented)
+                    if lines[i].strip() and not lines[i][0].isspace() and ':' in lines[i]:
+                        style_end_idx = i
+                        break
+                
+                # Insert layouts CSS before the style block ends
+                style_lines = []
+                for css_line in layouts_css.split('\n'):
+                    style_lines.append(f'  {css_line}\n')
+                
+                # Insert the new CSS lines
+                new_lines = lines[:style_end_idx] + style_lines + lines[style_end_idx:]
             else:
                 # Add style block before the closing ---
                 style_lines = ['style: |\n']
@@ -320,9 +384,9 @@ paginate: true
                 
                 # Insert style lines before the closing ---
                 new_lines = lines[:front_matter_end] + style_lines + lines[front_matter_end:]
-                
-                with open(deck_path, "w") as f:
-                    f.writelines(new_lines)
+            
+            with open(deck_path, "w") as f:
+                f.writelines(new_lines)
                 
         except Exception as e:
             print(f"Error merging layouts CSS: {e}")
@@ -460,15 +524,124 @@ paginate: true
                 f.write(new_content)
                 
         return metadata
-
-    def duplicate_presentation(self, source_name, new_name, copy_images=True):
+    
+    def set_presentation_title(self, name, title):
+        """Update the presentation title in both metadata.json and deck.marp.md front matter."""
+        path = os.path.join(self.root_dir, name)
+        if not os.path.exists(path):
+            raise ValueError(f"Presentation '{name}' not found.")
+        
+        # Update metadata
+        metadata_path = os.path.join(path, "metadata.json")
+        metadata = {}
+        if os.path.exists(metadata_path):
+            with open(metadata_path, "r") as f:
+                metadata = json.load(f)
+        
+        metadata['name'] = title  # Update name in metadata
+        metadata['updated_at'] = datetime.now().isoformat()
+        
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2)
+        
+        # Update Marp file front matter
+        marp_path = os.path.join(path, "deck.marp.md")
+        if os.path.exists(marp_path):
+            with open(marp_path, "r") as f:
+                content = f.read()
+            
+            # Parse front matter
+            if content.startswith('---'):
+                # Find the end of front matter
+                parts = content.split('\n---\n', 2)
+                if len(parts) >= 2:
+                    front_matter = parts[0][3:]  # Remove leading ---
+                    body = '\n---\n'.join(parts[1:])
+                    
+                    # Parse YAML front matter
+                    try:
+                        fm_data = yaml.safe_load(front_matter) or {}
+                    except:
+                        fm_data = {}
+                    
+                    # Update title
+                    fm_data['title'] = title
+                    
+                    # Reconstruct front matter
+                    new_front_matter = yaml.dump(fm_data, default_flow_style=False, sort_keys=False, allow_unicode=True).strip()
+                    new_content = '---\n' + new_front_matter + '\n---\n' + body
+                    
+                    with open(marp_path, "w") as f:
+                        f.write(new_content)
+        
+        return self.get_presentation(name)
+    
+    def set_presentation_description(self, name, description):
+        """Update the presentation description in both metadata.json and deck.marp.md front matter."""
+        path = os.path.join(self.root_dir, name)
+        if not os.path.exists(path):
+            raise ValueError(f"Presentation '{name}' not found.")
+        
+        # Update metadata
+        metadata_path = os.path.join(path, "metadata.json")
+        metadata = {}
+        if os.path.exists(metadata_path):
+            with open(metadata_path, "r") as f:
+                metadata = json.load(f)
+        
+        metadata['description'] = description
+        metadata['updated_at'] = datetime.now().isoformat()
+        
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2)
+        
+        # Update Marp file front matter
+        marp_path = os.path.join(path, "deck.marp.md")
+        if os.path.exists(marp_path):
+            with open(marp_path, "r") as f:
+                content = f.read()
+            
+            # Parse front matter
+            if content.startswith('---'):
+                # Find the end of front matter
+                parts = content.split('\n---\n', 2)
+                if len(parts) >= 2:
+                    front_matter = parts[0][3:]  # Remove leading ---
+                    body = '\n---\n'.join(parts[1:])
+                    
+                    # Parse YAML front matter
+                    try:
+                        fm_data = yaml.safe_load(front_matter) or {}
+                    except:
+                        fm_data = {}
+                    
+                    # Update description
+                    fm_data['description'] = description
+                    
+                    # Reconstruct front matter
+                    new_front_matter = yaml.dump(fm_data, default_flow_style=False, sort_keys=False, allow_unicode=True).strip()
+                    new_content = '---\n' + new_front_matter + '\n---\n' + body
+                    
+                    with open(marp_path, "w") as f:
+                        f.write(new_content)
+        
+        return self.get_presentation(name)
+    
+    def duplicate_presentation(self, source_name, new_name, description=None, copy_images=True):
         source_path = os.path.join(self.root_dir, source_name)
-        new_path = os.path.join(self.root_dir, new_name)
         
         if not os.path.exists(source_path):
             raise ValueError(f"Source presentation '{source_name}' not found.")
-        if os.path.exists(new_path):
-            raise ValueError(f"Destination '{new_name}' already exists.")
+        
+        # Auto-increment folder name if it already exists
+        # The folder name can differ from the metadata name
+        folder_name = new_name
+        counter = 2
+        while os.path.exists(os.path.join(self.root_dir, folder_name)):
+            folder_name = f"{new_name} {counter}"
+            counter += 1
+        
+        new_path = os.path.join(self.root_dir, folder_name)
             
         import shutil
         
@@ -489,12 +662,18 @@ paginate: true
             with open(metadata_path, "r") as f:
                 metadata = json.load(f)
                 
+            # Store user's exact specified name in metadata, not the auto-incremented folder name
             metadata.update({
-                "name": new_name,
+                "name": new_name,  # User's specified name, not folder_name
                 "created_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat()
             })
-            # Keep description, aspect_ratio, style, etc.
+            
+            # Update description if provided
+            if description is not None:
+                metadata["description"] = description
+            
+            # Keep aspect_ratio, style, etc. from source
             
             with open(metadata_path, "w") as f:
                 json.dump(metadata, f, indent=2)
@@ -516,5 +695,10 @@ paginate: true
                 content = pattern.sub(f"# {new_name}", content, count=1)
                 with open(marp_path, "w") as f:
                     f.write(content)
+        
+        # Get the presentation metadata and add the folder name for reference
+        result = self.get_presentation(folder_name)
+        if result:
+            result["_folder_name"] = folder_name
                     
-        return self.get_presentation(new_name)
+        return result

@@ -114,3 +114,6 @@ def step_impl(context, filename, presentation_name):
     filepath = os.path.join(context.temp_dir, presentation_name, filename)
     assert os.path.exists(filepath), f"File {filepath} does not exist. Directory contents: {os.listdir(os.path.dirname(filepath))}"
 
+
+
+

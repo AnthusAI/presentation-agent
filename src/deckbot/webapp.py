@@ -2,11 +2,11 @@ import os
 import json
 import time
 import threading
+import yaml
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context, send_file, send_from_directory
 from deckbot.manager import PresentationManager
 from deckbot.session_service import SessionService
 from deckbot.preferences import PreferencesManager
-from deckbot.state import StateManager
 
 app = Flask(__name__)
 
@@ -142,13 +142,10 @@ def delete_presentation():
     manager = PresentationManager()
     try:
         manager.delete_presentation(name)
-        
-        # Clear state if we deleted the current presentation
-        state_manager = StateManager()
-        current = state_manager.get_current_presentation()
-        if current == name:
-            state_manager.clear_current_presentation()
-            
+
+        # Note: State is now managed in frontend localStorage
+        # Frontend will handle cleanup if the deleted presentation was loaded
+
         return jsonify({"message": "Deleted", "name": name})
     except FileNotFoundError:
         return jsonify({"error": "Presentation not found"}), 404
@@ -271,7 +268,7 @@ def serve_presentation_preview(name, filename):
     
     return send_from_directory(cache_dir, filename)
 
-@app.route('/api/templates/<name>/preview-slides')
+@app.route('/api/templates/<path:name>/preview-slides')
 def get_template_preview_slides(name):
     """Generate and return cached PNG previews of all slides for a template."""
     import subprocess
@@ -339,7 +336,7 @@ def get_template_preview_slides(name):
     
     return jsonify({"previews": preview_urls})
 
-@app.route('/api/templates/<name>/.previews/<filename>')
+@app.route('/api/templates/<path:name>/.previews/<filename>')
 def serve_template_preview(name, filename):
     """Serve a cached preview image for a template."""
     manager = PresentationManager()
@@ -347,6 +344,22 @@ def serve_template_preview(name, filename):
     cache_dir = os.path.join(template_dir, ".previews")
     
     return send_from_directory(cache_dir, filename)
+
+@app.route('/api/templates/<path:name>/images/<filename>')
+def serve_template_image(name, filename):
+    """Serve an image file from a template's images directory."""
+    manager = PresentationManager()
+    template_dir = os.path.join(manager.templates_dir, name)
+    images_dir = os.path.join(template_dir, "images")
+    
+    if not os.path.exists(images_dir):
+        return "Images directory not found", 404
+    
+    file_path = os.path.join(images_dir, filename)
+    if not os.path.exists(file_path):
+        return f"File {filename} not found", 404
+    
+    return send_from_directory(images_dir, filename)
 
 @app.route('/api/layouts', methods=['GET'])
 def get_layouts():
@@ -437,32 +450,6 @@ def set_preference(key):
     prefs.set(key, data['value'])
     return jsonify({"message": "Preference updated", "key": key, "value": data['value']})
 
-@app.route('/api/state/current-presentation', methods=['GET'])
-def get_current_presentation_state():
-    """Get the persisted current presentation name."""
-    state_manager = StateManager()
-    current_pres = state_manager.get_current_presentation()
-    if not current_pres:
-        return jsonify({"name": None})
-        
-    # Verify it still exists
-    manager = PresentationManager()
-    if not manager.get_presentation(current_pres):
-        # Clean up if it was deleted outside of this session
-        state_manager.clear_current_presentation()
-        return jsonify({"name": None})
-        
-    return jsonify({"name": current_pres})
-
-@app.route('/api/state/current-presentation', methods=['DELETE'])
-def clear_current_presentation_state():
-    """Clear the persisted current presentation state and unload service."""
-    global current_service
-    state_manager = StateManager()
-    state_manager.clear_current_presentation()
-    current_service = None
-    return jsonify({"message": "State cleared"})
-
 @app.route('/api/load', methods=['POST'])
 def load_presentation():
     global current_service
@@ -475,11 +462,9 @@ def load_presentation():
         return jsonify({"error": "Presentation not found"}), 404
         
     current_service = SessionService(presentation)
-    
-    # Persist state
-    state_manager = StateManager()
-    state_manager.set_current_presentation(name)
-    
+
+    # Note: State is now managed in frontend localStorage (no backend persistence)
+
     # Return history
     history = current_service.get_history()
     return jsonify({"message": "Loaded", "history": history, "presentation": presentation})
@@ -487,22 +472,104 @@ def load_presentation():
 @app.route('/api/chat', methods=['POST'])
 def chat():
     global current_service
-    if not current_service:
+
+    # Get state parameters from request (new behavior)
+    presentation_name = None
+    current_slide = 1
+
+    # Handle both JSON and form data (for image uploads)
+    user_input = ""
+    uploaded_images = []
+
+    if request.is_json:
+        data = request.json
+        user_input = data.get('message', '')
+        presentation_name = data.get('presentation_name')
+        current_slide = data.get('current_slide', 1)
+    else:
+        # Form data with images
+        user_input = request.form.get('message', '')
+        presentation_name = request.form.get('presentation_name')
+        current_slide = int(request.form.get('current_slide', 1))
+
+    # Fallback: use global session if no presentation_name provided (backward compatibility)
+    if not presentation_name and current_service:
+        presentation_name = current_service.agent.context.get('name')
+
+    if not presentation_name:
         return jsonify({"error": "No presentation loaded"}), 400
-        
-    data = request.json
-    user_input = data.get('message')
+
+    # If we have presentation_name, ensure current_service matches or create new service
+    if not current_service or current_service.agent.context.get('name') != presentation_name:
+        # Load presentation context
+        manager = PresentationManager()
+        presentation = manager.get_presentation(presentation_name)
+        if not presentation:
+            return jsonify({"error": "Presentation not found"}), 404
+        current_service = SessionService(presentation)
+
+    # Store current_slide in service for this request
+    if hasattr(current_service, 'agent') and hasattr(current_service.agent, 'tools_handler'):
+        current_service.agent.tools_handler.current_slide = current_slide
+
+    # Handle image uploads (need to extract images before validation)
+    if not request.is_json:
+        # Get uploaded images
+        image_keys = [key for key in request.files.keys() if key.startswith('image_')]
+        for key in sorted(image_keys):
+            file = request.files[key]
+            if file and file.filename:
+                # Save image to presentation images directory
+                images_dir = os.path.join(current_service.agent.presentation_dir, "images")
+                os.makedirs(images_dir, exist_ok=True)
+                
+                # Generate unique filename
+                import uuid
+                ext = os.path.splitext(file.filename)[1] or '.png'
+                filename = f"upload_{uuid.uuid4().hex[:8]}{ext}"
+                filepath = os.path.join(images_dir, filename)
+                file.save(filepath)
+                
+                # Store relative path
+                rel_path = f"images/{filename}"
+                uploaded_images.append(rel_path)
     
-    if not user_input:
+    if not user_input and not uploaded_images:
         return jsonify({"error": "Empty message"}), 400
+
+    # Save user message immediately before starting agent thread
+    # This ensures the message is persisted even if page reloads
+    if current_service.agent:
+        # Include image paths in message if any
+        if uploaded_images:
+            image_refs = " ".join([f"[Image: {path}]" for path in uploaded_images])
+            full_message = f"{user_input} {image_refs}".strip()
+            current_service.agent._log_message("user", full_message)
+        else:
+            current_service.agent._log_message("user", user_input)
 
     # Use thread to not block
     def run_chat():
-        current_service.send_message(user_input)
-        
+        # Include image references in the message
+        if uploaded_images:
+            image_refs = " ".join([f"[Image: {path}]" for path in uploaded_images])
+            full_message = f"{user_input} {image_refs}".strip()
+            current_service.send_message(full_message, current_slide=current_slide)
+        else:
+            current_service.send_message(user_input, current_slide=current_slide)
+
     threading.Thread(target=run_chat).start()
     
     return jsonify({"status": "processing"})
+
+@app.route('/api/chat/cancel', methods=['POST'])
+def cancel_chat():
+    global current_service
+    if not current_service:
+        return jsonify({"error": "No presentation loaded"}), 400
+    
+    current_service.cancel()
+    return jsonify({"status": "cancelled"})
 
 @app.route('/api/images/generate', methods=['POST'])
 def generate_images():
@@ -692,21 +759,44 @@ def events():
 @app.route('/api/presentation/settings', methods=['GET'])
 def get_presentation_settings():
     global current_service
-    if not current_service:
+    
+    # Get presentation name from current_service
+    pres_name = None
+    if current_service and current_service.agent.context:
+        pres_name = current_service.agent.context.get('name')
+
+    if not pres_name:
         return jsonify({"error": "No presentation loaded"}), 400
     
     # Refresh metadata from file
     manager = PresentationManager()
-    if not current_service.agent.context:
-         return jsonify({"error": "Context not available"}), 500
-         
-    pres_name = current_service.agent.context['name']
     pres = manager.get_presentation(pres_name)
     
     if not pres:
         return jsonify({"error": "Presentation not found"}), 404
+    
+    # Also try to get title from Marp front matter
+    title = pres.get("name", "")  # Default to name from metadata
+    marp_path = os.path.join(manager.root_dir, pres_name, "deck.marp.md")
+    if os.path.exists(marp_path):
+        try:
+            with open(marp_path, "r") as f:
+                content = f.read()
+            if content.startswith('---'):
+                parts = content.split('\n---\n', 2)
+                if len(parts) >= 2:
+                    front_matter = parts[0][3:]  # Remove leading ---
+                    try:
+                        fm_data = yaml.safe_load(front_matter) or {}
+                        if 'title' in fm_data:
+                            title = fm_data['title']
+                    except:
+                        pass
+        except:
+            pass
         
     return jsonify({
+        "title": title,
         "aspect_ratio": pres.get("aspect_ratio", "4:3"),
         "description": pres.get("description", ""),
     })
@@ -714,47 +804,210 @@ def get_presentation_settings():
 @app.route('/api/presentation/settings', methods=['POST'])
 def set_presentation_settings():
     global current_service
-    if not current_service:
+    
+    # Get presentation name from current_service
+    pres_name = None
+    presentation_dir = None
+    if current_service and current_service.agent.context:
+        pres_name = current_service.agent.context.get('name')
+        presentation_dir = current_service.agent.presentation_dir
+
+    if not pres_name:
         return jsonify({"error": "No presentation loaded"}), 400
         
     data = request.json
+    title = data.get("title")
+    description = data.get("description")
     aspect_ratio = data.get("aspect_ratio")
     
-    if aspect_ratio:
-        manager = PresentationManager()
-        name = current_service.agent.context['name']
-        try:
-            manager.set_presentation_aspect_ratio(name, aspect_ratio)
-            
-            # Recompile
+    manager = PresentationManager()
+    errors = []
+    
+    try:
+        # Update title if provided
+        if title is not None:
+            manager.set_presentation_title(pres_name, title)
+        
+        # Update description if provided
+        if description is not None:
+            manager.set_presentation_description(pres_name, description)
+        
+        # Update aspect ratio if provided
+        if aspect_ratio:
+            manager.set_presentation_aspect_ratio(pres_name, aspect_ratio)
+        
+        # Recompile
+        if presentation_dir and os.path.exists(presentation_dir):
             import subprocess
-            presentation_dir = current_service.agent.presentation_dir
-            subprocess.run(["npx", "@marp-team/marp-cli", "deck.marp.md", "--allow-local-files"], cwd=presentation_dir, check=True)
+            subprocess.run(["npx", "@marp-team/marp-cli", "deck.marp.md", "--allow-local-files"], 
+                          cwd=presentation_dir, check=True)
+        elif pres_name:
+            # Fallback: construct path
+            presentation_dir = os.path.join(manager.root_dir, pres_name)
+            if os.path.exists(presentation_dir):
+                import subprocess
+                subprocess.run(["npx", "@marp-team/marp-cli", "deck.marp.md", "--allow-local-files"], 
+                              cwd=presentation_dir, check=True)
             
-        except Exception as e:
-             return jsonify({"error": f"Settings saved but compile failed: {e}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Settings saved but compile failed: {e}"}), 500
              
     return jsonify({"message": "Settings updated"})
+
+@app.route('/api/presentation/style', methods=['GET'])
+def get_style_spec():
+    global current_service
+    
+    pres_name = None
+    presentation_dir = None
+    if current_service and current_service.agent.context:
+        pres_name = current_service.agent.context.get('name')
+        presentation_dir = current_service.agent.presentation_dir
+
+    if not pres_name:
+        return jsonify({"error": "No presentation loaded"}), 400
+    
+    manager = PresentationManager()
+    pres = manager.get_presentation(pres_name)
+    
+    if not pres:
+        return jsonify({"error": "Presentation not found"}), 404
+    
+    # Check for style.png file (convention-based)
+    style_image_path = None
+    if presentation_dir:
+        style_png_path = os.path.join(presentation_dir, "images", "style.png")
+        if os.path.exists(style_png_path):
+            style_image_path = "images/style.png"
+    
+    # Build image_style response
+    image_style = pres.get("image_style", {}).copy() if pres.get("image_style") else {}
+    if style_image_path:
+        image_style["style_reference"] = style_image_path
+    else:
+        image_style["style_reference"] = None
+        
+    return jsonify({
+        "instructions": pres.get("instructions", ""),
+        "image_style": image_style
+    })
+
+@app.route('/api/presentation/style', methods=['POST'])
+def update_style_spec():
+    global current_service
+    
+    pres_name = None
+    presentation_dir = None
+    if current_service and current_service.agent.context:
+        pres_name = current_service.agent.context.get('name')
+        presentation_dir = current_service.agent.presentation_dir
+
+    if not pres_name:
+        return jsonify({"error": "No presentation loaded"}), 400
+        
+    manager = PresentationManager()
+    pres = manager.get_presentation(pres_name)
+    if not pres:
+        return jsonify({"error": "Presentation not found"}), 404
+
+    metadata_path = os.path.join(presentation_dir, "metadata.json")
+    
+    # Handle updates
+    updated = False
+    
+    # Helper to parse JSON or form data
+    if request.is_json:
+        data = request.json
+        if 'instructions' in data:
+            pres['instructions'] = data['instructions']
+            updated = True
+        
+        if 'image_style.prompt' in data:
+            if 'image_style' not in pres:
+                pres['image_style'] = {}
+            pres['image_style']['prompt'] = data['image_style.prompt']
+            updated = True
+            
+        if data.get('delete_reference'):
+             # Delete the style.png file (convention-based)
+             if presentation_dir:
+                 style_png_path = os.path.join(presentation_dir, "images", "style.png")
+                 if os.path.exists(style_png_path):
+                     os.remove(style_png_path)
+                     updated = True
+                 
+    else:
+        # Handle form data + file upload
+        if 'instructions' in request.form:
+            pres['instructions'] = request.form['instructions']
+            updated = True
+            
+        if 'image_style.prompt' in request.form:
+            if 'image_style' not in pres:
+                pres['image_style'] = {}
+            pres['image_style']['prompt'] = request.form['image_style.prompt']
+            updated = True
+            
+        if 'delete_reference' in request.form:
+             # Delete the style.png file (convention-based)
+             if presentation_dir:
+                 style_png_path = os.path.join(presentation_dir, "images", "style.png")
+                 if os.path.exists(style_png_path):
+                     os.remove(style_png_path)
+                     updated = True
+
+        if 'file' in request.files:
+            file = request.files['file']
+            if file and file.filename:
+                images_dir = os.path.join(presentation_dir, "images")
+                os.makedirs(images_dir, exist_ok=True)
+                
+                # Always save as style.png (convention-based)
+                filepath = os.path.join(images_dir, "style.png")
+                file.save(filepath)
+                updated = True
+
+    if updated:
+        from datetime import datetime
+        pres['updated_at'] = datetime.now().isoformat()
+        with open(metadata_path, "w") as f:
+            json.dump(pres, f, indent=2)
+            
+    return jsonify({"message": "Style spec updated", "style": {
+        "instructions": pres.get("instructions", ""),
+        "image_style": pres.get("image_style", {})
+    }})
 
 @app.route('/api/presentation/save-as', methods=['POST'])
 def save_presentation_as():
     global current_service
-    if not current_service:
-        return jsonify({"error": "No presentation loaded"}), 400
-        
+    
     data = request.json
     new_name = data.get("name")
+    new_description = data.get("description", "")
     copy_images = data.get("copy_images", True)
     
     if not new_name:
         return jsonify({"error": "Name is required"}), 400
+    
+    # Get source presentation name from current_service
+    source_name = None
+    if current_service:
+        source_name = current_service.agent.context.get('name')
+
+    if not source_name:
+        return jsonify({"error": "No presentation loaded"}), 400
         
     manager = PresentationManager()
-    source_name = current_service.agent.context['name']
     
     try:
-        manager.duplicate_presentation(source_name, new_name, copy_images=copy_images)
-        return jsonify({"message": "Presentation duplicated", "name": new_name})
+        result = manager.duplicate_presentation(source_name, new_name, description=new_description, copy_images=copy_images)
+        # Return the metadata name (user's specified name) and the actual folder name that was created
+        return jsonify({
+            "message": "Presentation duplicated", 
+            "name": result.get("name", new_name),
+            "folder_name": result.get("_folder_name", new_name)
+        })
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 

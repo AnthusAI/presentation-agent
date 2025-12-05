@@ -32,3 +32,6 @@ Feature: Semantic Release Configuration
     When I check the project root
     Then there should be a CHANGELOG.md file
 
+
+
+

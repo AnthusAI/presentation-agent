@@ -82,6 +82,11 @@
                         Code
                         <span class="kbd">^3</span>
                     </button>
+                    <button id="menu-view-style" class="dropdown-item checkable">
+                        <i data-lucide="palette" style="width: 16px; height: 16px;"></i>
+                        Style
+                        <span class="kbd">^4</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -98,6 +103,10 @@
                 <button id="toggle-btn-layouts" class="view-toggle-btn" title="Layouts">
                     <i data-lucide="layout-template"></i>
                     <span class="btn-label">Layouts</span>
+                </button>
+                <button id="toggle-btn-style" class="view-toggle-btn" title="Style">
+                    <i data-lucide="palette"></i>
+                    <span class="btn-label">Style</span>
                 </button>
             </div>
             <div class="theme-selector">
@@ -175,6 +184,14 @@
             <div class="modal">
                 <h2>Presentation Settings</h2>
                 <div class="form-group">
+                    <label for="pres-title" style="display: block; margin-bottom: 0.5rem;">Title</label>
+                    <input type="text" id="pres-title" placeholder="Presentation title" style="width: 100%; padding: 0.5rem; margin-bottom: 1rem;">
+                </div>
+                <div class="form-group">
+                    <label for="pres-description" style="display: block; margin-bottom: 0.5rem;">Description</label>
+                    <textarea id="pres-description" placeholder="Description (optional)" style="width: 100%; padding: 0.5rem; margin-bottom: 1rem; min-height: 60px; resize: vertical;"></textarea>
+                </div>
+                <div class="form-group">
                     <label for="pres-aspect-ratio" style="display: block; margin-bottom: 0.5rem;">Aspect Ratio</label>
                     <select id="pres-aspect-ratio" style="width: 100%; padding: 0.5rem; margin-bottom: 1rem;">
                         <option value="16:9">16:9 (Widescreen)</option>
@@ -197,6 +214,7 @@
                 <h2>Save Presentation As</h2>
                 <form id="save-as-form">
                     <input type="text" id="save-as-name" placeholder="New presentation name" required style="width: 100%; padding: 0.5rem; margin-bottom: 1rem;">
+                    <textarea id="save-as-description" placeholder="Description (optional)" style="width: 100%; padding: 0.5rem; margin-bottom: 1rem; min-height: 60px; resize: vertical;"></textarea>
                     <div style="margin-bottom: 1rem;">
                         <label style="display: flex; align-items: center; gap: 0.5rem;">
                             <input type="checkbox" id="save-as-copy-images" checked>
@@ -288,8 +306,15 @@
                 <div class="spinner"></div> <span class="text">Thinking...</span>
             </div>
             <div class="input-area">
+                <div id="image-preview-container" style="display: none; padding: 8px; background: hsl(var(--muted)); border-top: 1px solid hsl(var(--border));">
+                    <div id="image-previews" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
+                </div>
                 <div class="input-wrapper">
                     <textarea id="message-input" placeholder="Type a message... (Use /image <prompt> for images)"></textarea>
+                    <input type="file" id="image-upload-input" accept="image/*" multiple style="display: none;">
+                    <button id="btn-upload-image" title="Upload image">
+                        <i data-lucide="image" style="width: 16px; height: 16px;"></i>
+                    </button>
                     <button id="btn-send">
                         <i data-lucide="send" style="width: 16px; height: 16px;"></i>
                         Send
@@ -318,6 +343,43 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Style View -->
+            <div id="view-style" class="sidebar-view">
+                <div class="style-container" style="padding: 20px; overflow-y: auto; height: 100%;">
+                    <h3>Style Specification</h3>
+                    <p class="style-hint">Define your presentation's visual style and instructions</p>
+                    
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: bold;">Coding Agent Instructions</label>
+                        <p style="font-size: 0.8em; opacity: 0.7; margin-bottom: 8px;">Instructions for the agent on tone, structure, and content.</p>
+                        <textarea id="style-instructions" style="width: 100%; min-height: 100px; padding: 10px; resize: vertical;" placeholder="E.g. Use professional tone, start with an agenda..."></textarea>
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: bold;">Image Style Prompt</label>
+                        <p style="font-size: 0.8em; opacity: 0.7; margin-bottom: 8px;">Instructions for the image generation model.</p>
+                        <textarea id="style-image-prompt" style="width: 100%; min-height: 100px; padding: 10px; resize: vertical;" placeholder="E.g. Minimalist, blue and white color scheme..."></textarea>
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: bold;">Style Reference Image</label>
+                        <p style="font-size: 0.8em; opacity: 0.7; margin-bottom: 8px;">Upload an image to serve as a visual style reference.</p>
+                        
+                        <div id="style-ref-image-preview" style="margin-bottom: 10px; max-width: 100%; display: none;">
+                            <img id="style-ref-img" src="" style="max-width: 100%; border-radius: 4px; border: 1px solid hsl(var(--border));">
+                            <button id="btn-remove-ref-image" class="btn btn-secondary btn-sm" style="margin-top: 5px;">Remove Reference</button>
+                        </div>
+                        
+                        <input type="file" id="style-ref-upload" accept="image/*">
+                    </div>
+                    
+                    <div class="form-buttons">
+                        <button id="btn-save-style" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </div>
+            </div>
+
             
             <!-- Code View -->
             <div id="view-code" class="sidebar-view">

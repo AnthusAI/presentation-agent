@@ -22,6 +22,9 @@ class SessionService:
         self.pending_candidates: List[str] = []
         self.last_image_prompt: str = ""
         
+        # Cancellation flag
+        self._cancelled = False
+        
         # Chat history file path (same as agent's history file)
         self.history_file = getattr(self.agent, 'history_file', None)
 
@@ -49,6 +52,14 @@ class SessionService:
     def _handle_tool_event(self, event_type: str, data: Any):
         """Forward tool events to listeners."""
         self._notify(event_type, data)
+        
+        # Log tool_image events to chat history
+        if event_type == "tool_image":
+            self._log_rich_message(
+                message_type="tool_image",
+                role="system",
+                data=data
+            )
 
     def _handle_agent_request_details(self, details: Dict[str, Any]):
         """Handle agent request details - notify and log."""
@@ -136,16 +147,28 @@ class SessionService:
             content=details.get('user_message', '')
         )
 
-    def send_message(self, user_input: str, status_spinner=None) -> str:
+    def send_message(self, user_input: str, status_spinner=None, current_slide=None) -> str:
         """Send a message to the agent and get the response."""
+        # Clear cancellation flag at start of new request
+        self._cancelled = False
+
         # Emit user message so it appears in chat
         self._notify("message", {"role": "user", "content": user_input})
         self._notify("thinking_start")
         try:
-            response = self.agent.chat(user_input, status_spinner=status_spinner)
+            response = self.agent.chat(
+                user_input,
+                status_spinner=status_spinner,
+                cancelled_flag=self,
+                current_slide=current_slide
+            )
             self._notify("message", {"role": "model", "content": response})
             return response
         except Exception as e:
+            if self._cancelled:
+                error_msg = "Request cancelled by user."
+                self._notify("message", {"role": "model", "content": error_msg})
+                return error_msg
             error_msg = f"Error: {str(e)}"
             print(f"Agent error: {type(e).__name__}: {e}")
             import traceback
@@ -154,8 +177,16 @@ class SessionService:
             return error_msg
         finally:
             self._notify("thinking_end")
+    
+    def cancel(self):
+        """Cancel the current request."""
+        self._cancelled = True
+    
+    def is_cancelled(self):
+        """Check if the current request is cancelled."""
+        return self._cancelled
 
-    def _handle_agent_image_request(self, prompt: str, aspect_ratio: str = "1:1", resolution: str = "2K"):
+    def _handle_agent_image_request(self, prompt: str, aspect_ratio: str = "1:1", resolution: str = "2K", remix_reference_image=None, remix_slide_number=None, remix_image_path=None):
         """
         Called when agent's generate_image tool is invoked (web mode).
         
@@ -174,6 +205,11 @@ class SessionService:
             batch_slug_sent = False
             sent_candidate_count = 0  # Track how many candidates we've already sent
             current_batch_slug = None  # Track batch slug locally across progress callbacks
+            
+            # Capture remix_reference_image and metadata in closure
+            remix_ref = remix_reference_image
+            remix_slide = remix_slide_number
+            remix_img_path = remix_image_path
             
             def progress(current, total, status, current_candidates, prompt_details=None):
                 nonlocal batch_slug_sent, sent_candidate_count, current_batch_slug
@@ -215,12 +251,21 @@ class SessionService:
             try:
                 print(f"[IMAGE GEN] Starting generation for prompt: {prompt[:50]}... (aspect_ratio={aspect_ratio}, resolution={resolution})")
                 # Deterministic: Always generate 4 candidates
+                # Prepare batch metadata
+                batch_metadata = {}
+                if remix_slide is not None:
+                    batch_metadata["remix_slide_number"] = remix_slide
+                if remix_img_path is not None:
+                    batch_metadata["remix_image_path"] = remix_img_path
+                
                 result = self.nano_client.generate_candidates(
                     prompt, 
                     status_spinner=None, 
                     progress_callback=progress,
                     aspect_ratio=aspect_ratio,
-                    resolution=resolution
+                    resolution=resolution,
+                    remix_reference_image=remix_ref,
+                    batch_metadata=batch_metadata if batch_metadata else None
                 )
                 candidates = result['candidates']
                 batch_slug = result['batch_slug']
@@ -323,10 +368,32 @@ class SessionService:
             import threading
             def _notify_agent():
                 try:
-                    # This is the key: we're telling the agent what the system did
-                    # Include batch_slug to provide context about which generation batch this selection is from
-                    batch_info = f" (batch: {self.current_batch_slug})" if hasattr(self, 'current_batch_slug') else ""
-                    system_notification = f"[SYSTEM] User selected an image from{batch_info}. It has been saved to `{rel_path}`. Please incorporate this image into the presentation."
+                    # Load batch metadata to get remix context
+                    batch_metadata = {}
+                    if hasattr(self, 'current_batch_slug') and self.current_batch_slug:
+                        batch_folder = os.path.join(self.nano_client.drafts_dir, self.current_batch_slug)
+                        metadata_path = os.path.join(batch_folder, "metadata.json")
+                        if os.path.exists(metadata_path):
+                            try:
+                                with open(metadata_path, "r") as f:
+                                    batch_metadata = json.load(f)
+                            except Exception as e:
+                                print(f"Error reading batch metadata: {e}")
+                    
+                    # Build system notification with explicit instructions
+                    batch_info = f" (batch: {self.current_batch_slug})" if hasattr(self, 'current_batch_slug') and self.current_batch_slug else ""
+                    
+                    if batch_metadata.get("remix_slide_number"):
+                        # Remix slide: replace entire slide contents with image
+                        slide_num = batch_metadata["remix_slide_number"]
+                        system_notification = f"[SYSTEM] User selected a remixed image from{batch_info}. It has been saved to `{rel_path}`. REPLACE the entire contents of slide {slide_num} with this image by overlaying it. The image should cover the entire slide."
+                    elif batch_metadata.get("remix_image_path"):
+                        # Remix image: replace the original image
+                        original_path = batch_metadata["remix_image_path"]
+                        system_notification = f"[SYSTEM] User selected a remixed image from{batch_info}. It has been saved to `{rel_path}`. REPLACE the original image at `{original_path}` with this new remixed image. Update all references to use `{rel_path}` instead of `{original_path}`."
+                    else:
+                        # Regular image generation: incorporate as usual
+                        system_notification = f"[SYSTEM] User selected an image from{batch_info}. It has been saved to `{rel_path}`. Please incorporate this image into the presentation."
                     
                     self._notify("message", {"role": "system", "content": system_notification})
                     self._notify("thinking_start")

@@ -299,7 +299,7 @@ body {
 }
 
 .view-toggle-selector {
-  display: flex;
+  display: none; /* Hidden by default, shown when presentation is loaded */
   gap: 2px;
   background: hsl(var(--muted));
   border-radius: var(--radius);
@@ -307,6 +307,10 @@ body {
   border: 1px solid hsl(var(--border));
   height: 32px;
   box-sizing: border-box;
+}
+
+.view-toggle-selector.visible {
+  display: flex;
 }
 
 .view-toggle-btn {

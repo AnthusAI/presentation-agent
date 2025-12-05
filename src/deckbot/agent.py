@@ -59,7 +59,9 @@ class Agent:
             w("set_aspect_ratio", self.tools_handler.set_aspect_ratio),
             w("go_to_slide", self.tools_handler.go_to_slide),
             w("inspect_slide", self.tools_handler.inspect_slide),
-            w("validate_deck", self.tools_handler.validate_deck)
+            w("validate_deck", self.tools_handler.validate_deck),
+            w("remix_slide", self.tools_handler.remix_slide),
+            w("remix_image", self.tools_handler.remix_image)
         ]
 
         # Set up history file path
@@ -121,7 +123,7 @@ class Agent:
         # Load history
         self.load_history()
 
-    def _build_system_prompt(self):
+    def _build_system_prompt(self, current_slide=None):
         # Fetch dynamic content
         file_context = self.tools_handler.get_full_context()
 
@@ -243,7 +245,15 @@ class Agent:
 1. **Clean Layouts**: Use ample whitespace.
 2. **Visuals**: Prefer high-quality images (generated or provided) over cluttered text.
 """
-        
+
+        # Build current slide context
+        slide_context = ""
+        if current_slide:
+            slide_context = f"""
+## Current User Context
+The user is currently viewing **slide {current_slide}**. When using navigation tools like 'go_to_slide()' or 'compile_presentation()', keep this context in mind. The user's focus is on this slide.
+"""
+
         return f"""
 You are "DeckBot", a helpful AI assistant for creating Marp (Markdown) presentations.
 
@@ -251,7 +261,7 @@ You are "DeckBot", a helpful AI assistant for creating Marp (Markdown) presentat
 Name: {self.context['name']}
 Description: {self.context.get('description', '')}
 {template_instructions}
-
+{slide_context}
 ## Context - Read this First!
 The following files are the CURRENT content of the presentation.
 You do NOT need to call 'read_file' for these files.
@@ -396,6 +406,20 @@ img {{
 - Use 'open_presentation_folder' to OPEN the source files for the user to edit.
 - Use 'get_presentation_summary' to get a text summary of the slide deck state (titles, images, text previews). Use this for YOUR understanding or to summarize progress in chat, but NOT to "show" the deck visually.
 - Use 'list_presentations', 'create_presentation', 'load_presentation' to manage decks.
+- Use 'remix_slide' to remix an entire slide by rendering it to an image and generating a remixed version.
+  - **CRITICAL**: Use this when the user says "remix this slide", "remix slide X", "remix the slide", or any variation asking to remix a SLIDE
+  - The tool renders the entire slide (including all text, images, and layout) to an image first, then generates remixed candidates
+  - After selection, the remixed image will replace the ENTIRE slide contents by overlaying the image
+  - Requires 'slide_number' (integer) - use the current slide number if user says "this slide" or "the slide"
+  - Requires 'remix_prompt' (string describing the transformation, e.g., "make it look like everything is on fire")
+  - **DO NOT use 'remix_image' when the user asks to remix a slide** - always use 'remix_slide' for slide remixing
+- Use 'remix_image' to remix a specific existing image file.
+  - **CRITICAL**: Only use this when the user explicitly mentions an IMAGE FILE by name or path (e.g., "remix images/logo.png")
+  - The tool uses the existing image file as a reference and generates remixed candidates
+  - After selection, the remixed image will replace the original image file and all references to it
+  - Requires 'image_path' (string, relative to presentation directory, e.g., "images/logo.png")
+  - Requires 'remix_prompt' (string describing the transformation)
+  - **IMPORTANT**: If the user says "remix this slide" or "remix slide X", you MUST use 'remix_slide', NOT 'remix_image'
 
 ## Image Generation Workflow
 When the user asks for an image:
@@ -517,23 +541,38 @@ When the user asks for an image:
             # Re-raise if not handled
             raise e
 
-    def chat(self, user_input, status_spinner=None):
+    def chat(self, user_input, status_spinner=None, cancelled_flag=None, current_slide=None):
         if not self.model or not self.client:
             return "Error: API key not found or model initialization failed."
+
+        # Check for cancellation at start
+        if cancelled_flag and cancelled_flag.is_cancelled():
+            return "Request cancelled by user."
 
         # Update tools with spinner if provided
         if status_spinner:
             self.tools_handler.status_spinner = status_spinner
-        
+
         # Reset waiting flag at the start of each turn
         self.tools_handler.waiting_for_user_input = False
 
-        # Refresh system prompt to include latest file context
-        new_system_prompt = self._build_system_prompt()
+        # Refresh system prompt to include latest file context and current slide
+        new_system_prompt = self._build_system_prompt(current_slide=current_slide)
         self.system_prompt = new_system_prompt
         
         try:
-            self._log_message("user", user_input)
+            # Note: User message may already be logged by /api/chat endpoint
+            # Check if it's already in history to avoid duplicates
+            should_log = True
+            if self.history and len(self.history) > 0:
+                last_entry = self.history[-1]
+                if last_entry.get("role") == "user":
+                    parts = last_entry.get("parts", [])
+                    if parts and hasattr(parts[0], 'text') and parts[0].text == user_input:
+                        should_log = False
+
+            if should_log:
+                self._log_message("user", user_input)
             
             # Build message history for the API call
             # Convert our internal history format to the new API format
@@ -582,9 +621,17 @@ When the user asks for an image:
                 }
                 self.tools_handler.on_agent_request(request_details)
             
+            # Check for cancellation before API call
+            if cancelled_flag and cancelled_flag.is_cancelled():
+                return "Request cancelled by user."
+            
             # Make the API call with automatic function calling
             try:
                 response = self._generate_with_fallback(contents)
+                
+                # Check for cancellation after API call
+                if cancelled_flag and cancelled_flag.is_cancelled():
+                    return "Request cancelled by user."
             except KeyError as ke:
 
                 # If automatic function calling fails to find a tool
@@ -600,15 +647,34 @@ When the user asks for an image:
                     for part in candidate.content.parts:
                         if hasattr(part, 'text') and part.text:
                             text_response += part.text
+                        # Also check function responses for tool return values
+                        elif hasattr(part, 'function_response') and part.function_response:
+                            # Extract response text from function response if available
+                            func_response = part.function_response
+                            if hasattr(func_response, 'response') and func_response.response:
+                                # Function response might be a string or dict
+                                if isinstance(func_response.response, str):
+                                    text_response += func_response.response
+                                elif isinstance(func_response.response, dict) and 'text' in func_response.response:
+                                    text_response += func_response.response['text']
             
             if not text_response:
-                text_response = "I understand, but I don't have a response at the moment."
+                # If we're waiting for user input (e.g., image selection), don't return a generic message
+                # The tool return value should already explain what's happening via tool_end event
+                if self.tools_handler.waiting_for_user_input:
+                    text_response = ""  # Return empty string - the tool message already explains the wait
+                else:
+                    text_response = "I understand, but I don't have a response at the moment."
             
-            self._log_message("model", text_response)
+            # If tool set the waiting flag, don't log an empty response
+            # The tool return value already explains what's happening
+            if text_response or not self.tools_handler.waiting_for_user_input:
+                self._log_message("model", text_response)
             
-            # If tool set the waiting flag, append a note to the response
+            # If tool set the waiting flag, don't add anything - it's already explained in the tool return value
             if self.tools_handler.waiting_for_user_input:
-                # Don't add anything to the response - it's already explained in the tool return value
+                # Return the tool's message (which should explain the wait state)
+                # If text_response is empty, that's fine - the tool message was already shown
                 pass
             
             return text_response

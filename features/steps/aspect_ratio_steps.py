@@ -47,10 +47,9 @@ def step_impl(context, ratio):
     with patch('subprocess.run') as mock_run:
         context.tools.set_aspect_ratio(ratio)
 
-@when('I save the presentation as "{new_name}"')
-def step_impl(context, new_name):
-    context.manager.duplicate_presentation(context.presentation_name, new_name)
-    context.new_presentation_name = new_name
+# Note: The "I save the presentation as" step is now defined in save_as_steps.py
+# to support additional parameters like description and copy_images
+# This maintains backward compatibility with aspect_ratio.feature
 
 @then('I should have a presentation named "{name}"')
 def step_impl(context, name):

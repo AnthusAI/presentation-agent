@@ -1,13 +1,27 @@
 """
 Application state management for DeckBot.
 
-Stores application state (current presentation, etc.) in a YAML dotfile (.deckbot_state.yaml) in the project root.
-Separated from user preferences to keep configuration and state distinct.
+**DEPRECATED**: This module is deprecated and will be removed in a future version.
+State is now managed in the frontend via browser localStorage instead of
+persistent backend state files.
+
+Legacy functionality:
+- Stored application state (current presentation, etc.) in a YAML dotfile (.deckbot_state.yaml) in the project root.
+- Separated from user preferences to keep configuration and state distinct.
 """
 
 import os
 import yaml
+import warnings
 from typing import Any, Optional
+
+# Issue deprecation warning when module is imported
+warnings.warn(
+    "StateManager is deprecated and will be removed in a future version. "
+    "State is now managed in frontend localStorage.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 
 class StateManager:
@@ -88,5 +102,8 @@ class StateManager:
     def get_all(self) -> dict:
         """Get all state."""
         return self._read_config()
+
+
+
 
 

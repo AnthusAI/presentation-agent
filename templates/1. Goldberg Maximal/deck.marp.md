@@ -88,7 +88,7 @@ style: |
 
 <div class="title-content">
 
-# Alpine Minimal
+# Goldberg Maximal
 
 ## A clean, minimalist presentation template
 

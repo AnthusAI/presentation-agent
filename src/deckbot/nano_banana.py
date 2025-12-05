@@ -70,7 +70,7 @@ class NanoBananaClient:
              # Gemini 3 Pro Image Preview (Nano Banana Pro) - supports image generation
              self.model_name = 'gemini-3-pro-image-preview'
         
-    def generate_candidates(self, prompt, status_spinner=None, progress_callback=None, aspect_ratio="1:1", resolution="2K"):
+    def generate_candidates(self, prompt, status_spinner=None, progress_callback=None, aspect_ratio="1:1", resolution="2K", remix_reference_image=None, batch_metadata=None):
         """
         Generate 4 image candidates.
         
@@ -80,6 +80,7 @@ class NanoBananaClient:
             progress_callback: Function(current, total, status) for web mode progress updates
             aspect_ratio: Aspect ratio for the image (e.g., "1:1", "16:9")
             resolution: Image resolution ("1K", "2K", "4K")
+            remix_reference_image: Optional PIL.Image to use as remix reference (for remixing slides/images)
         """
         if status_spinner:
             status_spinner.stop() # Pause spinner for logs
@@ -103,17 +104,17 @@ class NanoBananaClient:
                     design_opinions = data.get("design_opinions", {})
                     if style.get("prompt"):
                         style_prompt = style["prompt"]
-                    
-                    # Load style reference image if specified
-                    if style.get("style_reference"):
-                        style_reference_path = os.path.join(self.presentation_dir, style["style_reference"])
-                        if os.path.exists(style_reference_path):
-                            try:
-                                style_reference_image = PIL.Image.open(style_reference_path)
-                            except Exception as e:
-                                console.print(f"[yellow]Warning: Could not load style reference image: {e}[/yellow]")
             except Exception:
                 pass
+        
+        # Load style reference image using convention-based style.png
+        style_png_path = os.path.join(self.presentation_dir, "images", "style.png")
+        if os.path.exists(style_png_path):
+            try:
+                style_reference_image = PIL.Image.open(style_png_path)
+                style_reference_path = style_png_path
+            except Exception as e:
+                console.print(f"[yellow]Warning: Could not load style.png: {e}[/yellow]")
         
         # Extract theme and styling information from deck.marp.md
         if os.path.exists(deck_path):
@@ -159,6 +160,10 @@ class NanoBananaClient:
         if style_reference_image:
             final_prompt = f"Using the provided style reference image as a visual style guide, generate: {final_prompt}"
         
+        # Add remix reference indication to prompt if we have one
+        if remix_reference_image:
+            final_prompt = f"Remix the provided reference image according to: {final_prompt}"
+        
         # Add aspect ratio instruction to prompt for Gemini native image generation
         aspect_ratio_instruction = {
             "1:1": "square image (1:1 aspect ratio)",
@@ -179,6 +184,9 @@ class NanoBananaClient:
         
         if style_reference_image:
              system_instructions.append("Using the provided style reference image ONLY as a style reference. Ignore the content of the reference image; copy only its visual style, color palette, and vibe.")
+        
+        if remix_reference_image:
+            system_instructions.append("Remix the provided reference image according to the user's prompt. Transform the reference image while maintaining its core composition and structure.")
              
         if theme_info:
             system_instructions.append(theme_info)
@@ -230,6 +238,22 @@ class NanoBananaClient:
         # Store batch_slug for later reference
         self.last_batch_slug = batch_slug
         
+        # Save batch metadata to JSON file
+        metadata = {
+            "batch_slug": batch_slug,
+            "prompt": prompt,
+            "aspect_ratio": aspect_ratio,
+            "resolution": resolution,
+            "created_at": datetime.now().isoformat(),
+            "is_remix": remix_reference_image is not None
+        }
+        # Merge in any additional batch metadata (e.g., remix_slide_number, remix_image_path)
+        if batch_metadata:
+            metadata.update(batch_metadata)
+        metadata_path = os.path.join(request_folder, "metadata.json")
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2)
+        
         if not self.client:
             console.print("[red]Error: API Key not found.[/red]")
             return self._fallback_generation(request_folder, progress_callback)
@@ -239,13 +263,19 @@ class NanoBananaClient:
                 progress_callback(i+1, 4, f"Generating image {i+1}/4...", candidates)
             console.print(f"  Generating candidate {i+1}/4...")
             try:
-                # Build contents list - include style reference image if available
+                # Build contents list - include style reference image and remix reference image if available
                 contents = []
                 if style_reference_image:
                     contents.append(style_reference_image)
                     import sys
                     if 'behave' not in sys.modules:
                         console.print(f"  [dim]Including style reference image (size: {style_reference_image.size})[/dim]")
+                
+                if remix_reference_image:
+                    contents.append(remix_reference_image)
+                    import sys
+                    if 'behave' not in sys.modules:
+                        console.print(f"  [dim]Including remix reference image (size: {remix_reference_image.size})[/dim]")
                 
                 if system_message:
                     contents.append(system_message)
