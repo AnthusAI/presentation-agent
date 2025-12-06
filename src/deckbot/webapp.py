@@ -3,7 +3,7 @@ import json
 import time
 import threading
 import yaml
-from flask import Flask, render_template, request, jsonify, Response, stream_with_context, send_file, send_from_directory
+from flask import Flask, request, jsonify, Response, stream_with_context, send_file, send_from_directory
 from flask_cors import CORS
 from deckbot.manager import PresentationManager
 from deckbot.session_service import SessionService
